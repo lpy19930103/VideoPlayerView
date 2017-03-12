@@ -133,6 +133,10 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
         mFullBtn.setOnClickListener(this);
     }
 
+    public void setDataUrl(String url) {
+        this.mUrl = url;
+    }
+
     public void isShowFullBtn(boolean isShow) {
         mFullBtn.setImageResource(isShow ? R.drawable.xadsdk_ad_mini : R.drawable.xadsdk_ad_mini_null);
         mFullBtn.setVisibility(isShow ? View.VISIBLE : View.GONE);
@@ -521,9 +525,16 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-//            case R.id.xadsdk_small_play_btn:
-//                break;
+        if (v == mLoadingBar) {
+            if (this.playerState == STATE_PAUSING) {
+                if (getVisiblePercent(mViewGroup)
+                        > VIDEO_SCREEN_PERCENT) {
+                    resume();
+                    this.listener.onClickPlay();
+                }
+            } else {
+                load();
+            }
         }
 
     }
