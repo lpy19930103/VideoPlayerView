@@ -6,11 +6,11 @@ package com.lipy.videoplayer.library.listener;
 
 public interface VideoPlayerListener {
 
-    void onBufferUpdate(int time);
+    void onBufferUpdate(int time);//播放到第几秒
 
-    void onClickFullScreenBtn();
+    void onClickFullScreenBtn();//跳转全屏
 
-    void onClickVideo();
+    void onClickVideo();//点击视频区域
 
     void onClickBackBtn();
 

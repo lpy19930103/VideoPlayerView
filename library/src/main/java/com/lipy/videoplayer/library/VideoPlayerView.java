@@ -13,6 +13,7 @@ import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Message;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -84,8 +85,12 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
             super.handleMessage(msg);
             switch (msg.what) {
                 case TIME_MSG:
-                    listener.onBufferUpdate(1000);
-                    sendEmptyMessageDelayed(TIME_MSG, TIME_INVAL);//
+                    if (isPlaying()) {
+                        if (listener != null) {
+                            listener.onBufferUpdate(getCurrentPosition());
+                        }
+                        sendEmptyMessageDelayed(TIME_MSG, TIME_INVAL);//
+                    }
                     break;
             }
 
@@ -150,102 +155,6 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
         return mIsComplete;
     }
 
-
-    //加载视频url
-    public void load() {
-        if (playerState != STATE_IDLE) {
-            return;
-        }
-        try {
-            showLoadingView();
-            setCurrentPlayState(STATE_IDLE);
-            checkMediaPlayer();
-            mediaPlayer.setDataSource(mUrl);
-            mediaPlayer.prepareAsync();
-        } catch (Exception e) {
-            stop();
-            e.printStackTrace();
-        }
-    }
-
-    //暂停
-    public void pause() {
-
-        if (playerState != STATE_PLAYING) {
-            return;
-        }
-        setCurrentPlayState(STATE_PLAYING);
-
-        if (isPlaying()) {
-            mediaPlayer.pause();
-        }
-        showPauseView(false);
-        handler.removeCallbacksAndMessages(null);
-
-    }
-
-    //恢复播放
-    public void resume() {
-        if (playerState != STATE_PAUSING) {
-            return;
-        }
-        if (!isPlaying()) {
-            entryResumeState();
-            showPauseView(true);
-            mediaPlayer.start();
-            handler.sendEmptyMessage(TIME_MSG);
-        }
-
-    }
-
-    //视频停止
-    public void stop() {
-        if (this.mediaPlayer != null) {
-            this.mediaPlayer.reset();
-            this.mediaPlayer.setOnSeekCompleteListener(null);
-            this.mediaPlayer.stop();
-            this.mediaPlayer.release();
-            this.mediaPlayer = null;
-        }
-        handler.removeCallbacksAndMessages(null);
-        setCurrentPlayState(STATE_IDLE);
-        if (mCurrentCount < LOAD_TOTAL_COUNT) {
-            mCurrentCount += 1;
-            load();
-        } else {
-            showPauseView(false);//显示暂停状态
-        }
-    }
-
-    //播放完成后回到初始状态
-    public void playBack() {
-        setCurrentPlayState(STATE_PAUSING);
-        handler.removeCallbacksAndMessages(null);
-        if (mediaPlayer != null) {
-            mediaPlayer.setOnSeekCompleteListener(null);
-            mediaPlayer.seekTo(0);
-            mediaPlayer.pause();
-        }
-        this.showPauseView(false);
-    }
-
-    //销毁播放器
-    public void destory() {
-    }
-
-
-    /**
-     * @param time
-     */
-    public void seekAndResume(int time) {
-    }
-
-    /**
-     * @param time
-     */
-    public void seekAndPause(int time) {
-    }
-
     /**
      * 进入播放状态时的状态更新
      */
@@ -257,10 +166,7 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
     }
 
     public boolean isPlaying() {
-        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-            return true;
-        }
-        return false;
+        return mediaPlayer != null && mediaPlayer.isPlaying();
     }
 
     public void setIsComplete(boolean isComplete) {
@@ -351,47 +257,270 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
         return 0;
     }
 
+
+    //加载视频url
+    public void load() {
+        if (playerState != STATE_IDLE) {
+            return;
+        }
+        try {
+            Log.e(TAG, "load");
+            showLoadingView();
+            setCurrentPlayState(STATE_IDLE);
+            checkMediaPlayer();
+            mediaPlayer.setDataSource(mUrl);
+            mediaPlayer.prepareAsync();//异步加载视频资源
+        } catch (Exception e) {
+            stop();
+            e.printStackTrace();
+        }
+    }
+
+    //暂停
+    public void pause() {
+        if (playerState != STATE_PLAYING) {
+            return;
+        }
+        Log.e(TAG, "pause");
+        setCurrentPlayState(STATE_PAUSING);
+        if (isPlaying()) {
+            mediaPlayer.pause();
+        }
+        showPauseView(false);
+        handler.removeCallbacksAndMessages(null);
+
+    }
+
+    //恢复播放
+    public void resume() {
+        if (playerState != STATE_PAUSING) {
+            return;
+        }
+        Log.e(TAG, "resume");
+        if (!isPlaying()) {
+            entryResumeState();
+            showPauseView(true);
+            mediaPlayer.setOnSeekCompleteListener(null);
+            mediaPlayer.start();
+            handler.sendEmptyMessage(TIME_MSG);
+        } else {
+            showPauseView(false);
+        }
+
+    }
+
+    //视频停止
+    public void stop() {
+        Log.e(TAG, "stop");
+        if (this.mediaPlayer != null) {
+            this.mediaPlayer.reset();
+            this.mediaPlayer.setOnSeekCompleteListener(null);
+            this.mediaPlayer.stop();
+            this.mediaPlayer.release();
+            this.mediaPlayer = null;
+        }
+        handler.removeCallbacksAndMessages(null);
+        setCurrentPlayState(STATE_IDLE);
+        //retry
+        if (mCurrentCount < LOAD_TOTAL_COUNT) {
+            mCurrentCount += 1;
+            load();
+        } else {
+            showPauseView(false);//显示暂停状态
+        }
+    }
+
+    //播放完成后回到初始状态
+    public void playBack() {
+        Log.e(TAG, "playBack");
+        setCurrentPlayState(STATE_PAUSING);
+        handler.removeCallbacksAndMessages(null);
+        if (mediaPlayer != null) {
+            mediaPlayer.setOnSeekCompleteListener(null);
+            mediaPlayer.seekTo(0);
+            mediaPlayer.pause();
+        }
+        showPauseView(false);
+    }
+
+    //销毁播放器
+    public void destory() {
+        Log.e(TAG, "destory");
+    }
+
+
     /**
-     * 异步加载定帧图
+     * @param time
      */
-    private void loadFrameImage() {
-        if (mFrameLoadListener != null) {
-            mFrameLoadListener.onStartFrameLoad(mFrameURI, new ImageLoaderListener() {
-                @Override
-                public void onLoadingComplete(Bitmap loadedImage) {
-                    if (loadedImage != null) {
-                        mFrameView.setScaleType(ImageView.ScaleType.FIT_XY);
-                        mFrameView.setImageBitmap(loadedImage);
-                    } else {
-                        mFrameView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                        mFrameView.setImageResource(R.drawable.xadsdk_img_error);
-                    }
+    public void seekAndResume(int time) {
+        Log.e(TAG, "seekAndResume");
+    }
+
+    /**
+     * @param time
+     */
+    public void seekAndPause(int time) {
+        Log.e(TAG, "seekAndPause");
+    }
+
+
+    /**
+     * 播放器就绪状态
+     *
+     * @param mp
+     */
+    @Override
+    public void onPrepared(MediaPlayer mp) {
+        Log.e(TAG, "onPrepared");
+        showPlayView();
+        mediaPlayer = mp;
+        if (mediaPlayer != null) {
+            mediaPlayer.setOnBufferingUpdateListener(this);
+            mCurrentCount = 0;
+            if (listener != null) {
+                listener.onAdVideoLoadSuccess();
+            }
+            decideCanPlay();
+        }
+
+    }
+
+    /**
+     * 播放器缓冲更新
+     *
+     * @param mp
+     * @param percent
+     */
+    @Override
+    public void onBufferingUpdate(MediaPlayer mp, int percent) {
+        Log.e(TAG, "onBufferingUpdate");
+    }
+
+    /**
+     * 播放器播放完成
+     *
+     * @param mp
+     */
+    @Override
+    public void onCompletion(MediaPlayer mp) {
+        Log.e(TAG, "onCompletion");
+        if (listener != null) {
+            listener.onAdVideoLoadComplete();
+        }
+        setIsComplete(true);
+        setIsRealPause(true);
+        playBack();
+    }
+
+    /**
+     * 播放器播放异常
+     *
+     * @param mp
+     * @param what
+     * @param extra
+     * @return
+     */
+    @Override
+    public boolean onError(MediaPlayer mp, int what, int extra) {
+        Log.e(TAG, "onError");
+        setCurrentPlayState(STATE_ERROR);
+        if (mCurrentCount >= LOAD_TOTAL_COUNT) {
+            if (listener != null) {
+                listener.onAdVideoLoadFailed();
+            }
+            showPauseView(false);
+        }
+        stop();
+        return true;//返回true 自己处理异常
+    }
+
+    /**
+     * view显示改变时
+     *
+     * @param changedView
+     * @param visibility
+     */
+    @Override
+    protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        Log.e(TAG, "onVisibilityChanged");
+        if (visibility == VISIBLE && playerState == STATE_PAUSING) {
+            if (isRealPause() || isComplete()) {
+                pause();
+            } else {
+                decideCanPlay();
+            }
+        } else {
+            pause();
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        return true;
+    }
+
+    @Override
+    public void onClick(View v) {
+        if (v == mMiniPlayBtn) {
+            if (playerState == STATE_PAUSING) {
+                if (getVisiblePercent(mViewGroup)
+                        > VIDEO_SCREEN_PERCENT) {
+                    resume();
+
                 }
-            });
+            } else {
+                load();
+            }
+        } else if (v == mVideoView) {
+            if (listener != null) {
+                listener.onClickPlay();
+            }
+        } else if (v == mFullBtn) {
+            if (listener != null) {
+                listener.onClickFullScreenBtn();
+            }
         }
+
+
     }
 
-    private void registerBroadcastReceiver() {
-        if (mScreenReceiver == null) {
-            mScreenReceiver = new ScreenEventReceiver();
-            IntentFilter filter = new IntentFilter();
-            filter.addAction(Intent.ACTION_SCREEN_OFF);
-            filter.addAction(Intent.ACTION_USER_PRESENT);
-            getContext().registerReceiver(mScreenReceiver, filter);
-        }
+    /**
+     * TextureView就绪
+     *
+     * @param surface
+     * @param width
+     * @param height
+     */
+    @Override
+    public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+        Log.e(TAG, "onSurfaceTextureAvailable");
+        videoSurface = new Surface(surface);
+        checkMediaPlayer();
+        mediaPlayer.setSurface(videoSurface);
+        load();
     }
 
-    private void unRegisterBroadcastReceiver() {
-        if (mScreenReceiver != null) {
-            getContext().unregisterReceiver(mScreenReceiver);
-        }
+    @Override
+    public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+        Log.e(TAG, "onSurfaceTextureSizeChanged");
+    }
+
+    @Override
+    public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+        Log.e(TAG, "onSurfaceTextureDestroyed");
+        return false;
+    }
+
+    @Override
+    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+        Log.e(TAG, "onSurfaceTextureUpdated");
     }
 
     @Override
     public boolean onInfo(MediaPlayer mp, int what, int extra) {
         return false;
     }
-
 
     /**
      * 监听锁屏事件的广播接收器
@@ -420,155 +549,54 @@ public class VideoPlayerView extends RelativeLayout implements MediaPlayer.OnPre
         }
     }
 
+    private void registerBroadcastReceiver() {
+        if (mScreenReceiver == null) {
+            mScreenReceiver = new ScreenEventReceiver();
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            filter.addAction(Intent.ACTION_USER_PRESENT);
+            getContext().registerReceiver(mScreenReceiver, filter);
+        }
+    }
+
+    private void unRegisterBroadcastReceiver() {
+        if (mScreenReceiver != null) {
+            getContext().unregisterReceiver(mScreenReceiver);
+        }
+    }
+
     private void decideCanPlay() {
-        if (getVisiblePercent(mViewGroup) > VIDEO_SCREEN_PERCENT)
+        if (getVisiblePercent(mViewGroup) > VIDEO_SCREEN_PERCENT) {
             //来回切换页面时，只有 >50,且满足自动播放条件才自动播放
+            setCurrentPlayState(STATE_PAUSING);
             resume();
-        else
-            pause();
-    }
-
-
-    /**
-     * 播放器就绪状态
-     *
-     * @param mp
-     */
-    @Override
-    public void onPrepared(MediaPlayer mp) {
-        mediaPlayer = mp;
-        if (mediaPlayer != null) {
-            mediaPlayer.setOnBufferingUpdateListener(this);
-            mCurrentCount = 0;
-            if (listener != null) {
-                listener.onAdVideoLoadSuccess();
-            }
-            decideCanPlay();
-
-
-        }
-
-    }
-
-    /**
-     * 播放器缓冲更新
-     *
-     * @param mp
-     * @param percent
-     */
-    @Override
-    public void onBufferingUpdate(MediaPlayer mp, int percent) {
-
-    }
-
-    /**
-     * 播放器播放完成
-     *
-     * @param mp
-     */
-    @Override
-    public void onCompletion(MediaPlayer mp) {
-        if (listener != null) {
-            listener.onAdVideoLoadComplete();
-        }
-        setIsComplete(true);
-        setIsRealPause(true);
-        playBack();
-    }
-
-    /**
-     * 播放器播放异常
-     *
-     * @param mp
-     * @param what
-     * @param extra
-     * @return
-     */
-    @Override
-    public boolean onError(MediaPlayer mp, int what, int extra) {
-        this.playerState = STATE_ERROR;
-        if (mCurrentCount >= LOAD_TOTAL_COUNT) {
-            if (listener != null) {
-                listener.onAdVideoLoadFailed();
-            }
-            showPauseView(false);
-        }
-        stop();//重新加载
-        return true;//返回true 自己处理异常
-    }
-
-    /**
-     * view显示改变时
-     *
-     * @param changedView
-     * @param visibility
-     */
-    @Override
-    protected void onVisibilityChanged(View changedView, int visibility) {
-        super.onVisibilityChanged(changedView, visibility);
-
-        if (visibility == VISIBLE && playerState == STATE_PAUSING) {
-            if (mIsRealPause || isComplete()) {
-                pause();
-            } else {
-                decideCanPlay();
-            }
         } else {
+            setCurrentPlayState(STATE_PLAYING);
             pause();
         }
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        return true;
-    }
-
-    @Override
-    public void onClick(View v) {
-        if (v == mLoadingBar) {
-            if (this.playerState == STATE_PAUSING) {
-                if (getVisiblePercent(mViewGroup)
-                        > VIDEO_SCREEN_PERCENT) {
-                    resume();
-                    this.listener.onClickPlay();
-                }
-            } else {
-                load();
-            }
-        }
-
-    }
-
     /**
-     * TextureView就绪
-     *
-     * @param surface
-     * @param width
-     * @param height
+     * 异步加载定帧图
      */
-    @Override
-    public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-        videoSurface = new Surface(surface);
-        checkMediaPlayer();
-        mediaPlayer.setSurface(videoSurface);
-        load();
+    private void loadFrameImage() {
+        if (mFrameLoadListener != null) {
+            mFrameLoadListener.onStartFrameLoad(mFrameURI, new ImageLoaderListener() {
+                @Override
+                public void onLoadingComplete(Bitmap loadedImage) {
+                    if (loadedImage != null) {
+                        mFrameView.setScaleType(ImageView.ScaleType.FIT_XY);
+                        mFrameView.setImageBitmap(loadedImage);
+                    } else {
+                        mFrameView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                        mFrameView.setImageResource(R.drawable.xadsdk_img_error);
+                    }
+                }
+            });
+        }
     }
 
-    @Override
-    public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-
-    }
-
-    @Override
-    public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-        return false;
-    }
-
-    @Override
-    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-
-    }
-
+    //获取屏幕当前展示的百分比
     public static int getVisiblePercent(View pView) {
         if (pView != null && pView.isShown()) {
             DisplayMetrics displayMetrics = pView.getContext().getResources().getDisplayMetrics();

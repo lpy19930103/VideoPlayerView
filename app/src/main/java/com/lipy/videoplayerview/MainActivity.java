@@ -14,7 +14,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         RelativeLayout layout = (RelativeLayout) findViewById(R.id.viewgroup);
         VideoPlayerView videoPlayerView = new VideoPlayerView(this, layout);
-        videoPlayerView.setDataUrl("http://192.168.1.125:8080/miniapps/test.mp4");
+        videoPlayerView.setDataUrl("http://192.168.1.125:8080/miniapps/text2.mp4");
         layout.addView(videoPlayerView);
     }
 }
