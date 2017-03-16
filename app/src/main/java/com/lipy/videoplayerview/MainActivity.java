@@ -1,10 +1,10 @@
 package com.lipy.videoplayerview;
 
+import com.lipy.videoplayer.library.VideoPlayerView;
+
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.widget.RelativeLayout;
-
-import com.lipy.videoplayer.library.VideoPlayerView;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -14,7 +14,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         RelativeLayout layout = (RelativeLayout) findViewById(R.id.viewgroup);
         VideoPlayerView videoPlayerView = new VideoPlayerView(this, layout);
-        videoPlayerView.setDataUrl("http://192.168.1.125:8080/miniapps/text2.mp4");
+        videoPlayerView.setDataUrl("http://baobab.wdjcdn.com/14564977406580.mp4");
         layout.addView(videoPlayerView);
     }
 }
