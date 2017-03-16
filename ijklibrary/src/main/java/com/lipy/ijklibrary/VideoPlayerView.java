@@ -41,9 +41,9 @@ import tv.danmaku.ijk.media.player.IMediaPlayer;
  * Created by lipy on 2017/3/12.
  */
 
-public class VideoPlayerView extends RelativeLayout implements IjkExoMediaPlayer.OnPreparedListener,
-        IjkExoMediaPlayer.OnBufferingUpdateListener, IjkExoMediaPlayer.OnCompletionListener, IjkExoMediaPlayer.OnErrorListener,
-        View.OnClickListener, TextureView.SurfaceTextureListener, IjkExoMediaPlayer.OnInfoListener, IjkExoMediaPlayer.OnSeekCompleteListener {
+public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPreparedListener,
+        IMediaPlayer.OnBufferingUpdateListener, IMediaPlayer.OnCompletionListener, IMediaPlayer.OnErrorListener,
+        View.OnClickListener, TextureView.SurfaceTextureListener, IMediaPlayer.OnInfoListener, IMediaPlayer.OnSeekCompleteListener {
 
 
     private static final String TAG = "VideoPlayerView";
@@ -440,7 +440,7 @@ public class VideoPlayerView extends RelativeLayout implements IjkExoMediaPlayer
         videoSurface = new Surface(surface);
         checkMediaPlayer();
         mediaPlayer.setSurface(videoSurface);
-//        load();
+        load();
     }
 
     @Override
@@ -504,6 +504,9 @@ public class VideoPlayerView extends RelativeLayout implements IjkExoMediaPlayer
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         Log.e(TAG, "onPrepared");
+        if (isPlaying()) {
+            return;
+        }
         showPlayView();
         mediaPlayer = (IjkExoMediaPlayer) iMediaPlayer;
         if (mediaPlayer != null) {
