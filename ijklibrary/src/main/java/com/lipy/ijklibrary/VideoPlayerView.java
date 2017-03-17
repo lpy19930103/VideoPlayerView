@@ -476,12 +476,11 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
         Log.e(TAG, "onSurfaceTextureAvailable");
-        showDisplay( new Surface(surface));
 
-//        videoSurface = new Surface(surface);
-//        checkMediaPlayer();
-//        mediaPlayer.setSurface(videoSurface);
-//        load();
+        videoSurface = new Surface(surface);
+        checkMediaPlayer();
+        mediaPlayer.setSurface(videoSurface);
+        load();
     }
 
     private void showDisplay(Surface surface) {
@@ -495,7 +494,6 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
                     mediaPlayer.seekTo(mediaPlayer.getCurrentPosition() - 20);
                 }
             }
-        load();
     }
 
 
