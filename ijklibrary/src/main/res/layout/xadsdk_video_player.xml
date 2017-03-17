@@ -6,8 +6,13 @@
     android:layout_height="match_parent"
     android:background="@android:color/black"
 >
+    <RelativeLayout android:layout_width="match_parent"
+                    android:id="@+id/textureViewGroup"
+                    android:layout_height="wrap_content">
 
-    <TextureView
+    </RelativeLayout>
+
+    <com.lipy.ijklibrary.GSYTextureView
         android:id="@+id/xadsdk_player_video_textureView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
