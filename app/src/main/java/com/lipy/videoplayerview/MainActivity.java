@@ -16,7 +16,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Log.e("LIPY","onCreate");
+        Log.e("LIPY", "onCreate");
         RelativeLayout layout = (RelativeLayout) findViewById(R.id.viewgroup);
         mVideoPlayerView = new VideoPlayerView(this, true);
         mVideoPlayerView.setId(FULLSCREEN_ID);
@@ -27,7 +27,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        mVideoPlayerView.destoryView();
         super.onDestroy();
-        mVideoPlayerView.destory();
     }
 }
