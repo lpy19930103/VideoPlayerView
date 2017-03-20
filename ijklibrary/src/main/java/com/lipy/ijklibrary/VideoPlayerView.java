@@ -13,7 +13,6 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
@@ -48,7 +47,7 @@ import java.lang.reflect.Constructor;
 
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
-import tv.danmaku.ijk.media.player.IjkMediaPlayer;
+
 
 /**
  * 视频播放view
@@ -57,7 +56,8 @@ import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPreparedListener,
         IMediaPlayer.OnBufferingUpdateListener, IMediaPlayer.OnCompletionListener, IMediaPlayer.OnErrorListener,
-        View.OnClickListener, TextureView.SurfaceTextureListener, IMediaPlayer.OnInfoListener, IMediaPlayer.OnSeekCompleteListener, IMediaPlayer.OnVideoSizeChangedListener {
+        View.OnClickListener, TextureView.SurfaceTextureListener, IMediaPlayer.OnInfoListener,
+        IMediaPlayer.OnSeekCompleteListener, IMediaPlayer.OnVideoSizeChangedListener {
 
 
     private static final String TAG = "VideoPlayerView";
@@ -95,7 +95,7 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
     private ImageView mFrameView;
     private Surface videoSurface;
     protected OrientationUtils mOrientationUtils; //旋转工具类
-    private IjkMediaPlayer mediaPlayer;
+    private IjkExoMediaPlayer mediaPlayer;
     private VideoPlayerListener listener;
     private FrameImageLoadListener mFrameLoadListener;
     private ScreenEventReceiver mScreenReceiver;
@@ -237,11 +237,11 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
         }
     }
 
-    private IjkMediaPlayer createMediaPlayer() {
-        mediaPlayer = new IjkMediaPlayer();
+    private IjkExoMediaPlayer createMediaPlayer() {
+        mediaPlayer = new IjkExoMediaPlayer(getContext());
         mediaPlayer.reset();
         mediaPlayer.setOnCompletionListener(this);
-//        mediaPlayer.setOnBufferingUpdateListener(this);
+        mediaPlayer.setOnBufferingUpdateListener(this);
         mediaPlayer.setScreenOnWhilePlaying(true);
         mediaPlayer.setOnPreparedListener(this);
         mediaPlayer.setOnSeekCompleteListener(this);
@@ -428,15 +428,15 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         Log.e(TAG, "onVisibilityChanged");
-        if (visibility == VISIBLE && playerState == STATE_PAUSING) {
-            if (isRealPause() || isComplete()) {
-                pause();
-            } else {
-                decideCanPlay();
-            }
-        } else {
-            pause();
-        }
+//        if (visibility == VISIBLE && playerState == STATE_PAUSING) {
+//            if (isRealPause() || isComplete()) {
+//                pause();
+//            } else {
+//                decideCanPlay();
+//            }
+//        } else {
+//            pause();
+//        }
     }
 
     @Override
@@ -461,6 +461,9 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
                 listener.onClickPlay();
             }
         } else if (v == mFullBtn) {
+//            mOrientationUtils = new OrientationUtils((Activity) getContext(), this);
+//            mOrientationUtils.resolveByClick();
+            mSeekOnStart = getCurrentPosition();
             startWindowFullscreen(getContext(), true, true);
             if (listener != null) {
                 listener.onClickFullScreenBtn();
@@ -475,25 +478,34 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
      */
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+        if (isPlaying()){
+            showPlayView();
+        }
         Log.e(TAG, "onSurfaceTextureAvailable");
-
         videoSurface = new Surface(surface);
-        checkMediaPlayer();
-        mediaPlayer.setSurface(videoSurface);
-        load();
+//        checkMediaPlayer();
+        showDisplay(videoSurface);
+
     }
 
     private void showDisplay(Surface surface) {
-
-            if (mediaPlayer != null && surface.isValid()) {
-                mediaPlayer.setSurface(surface);
+        if (surface == null && mediaPlayer != null) {
+            mediaPlayer.setSurface(null);
+        } else {
+            Surface holder = surface;
+            if (mediaPlayer != null && holder.isValid()) {
+                mediaPlayer.setSurface(holder);
             }
-            if (mediaPlayer instanceof IjkMediaPlayer) {
+            Log.e(TAG,"showDisplay: mediaPlayer+"+mediaPlayer);
+            if (mediaPlayer instanceof IjkExoMediaPlayer) {
+                Log.e(TAG,"showDisplay:"+mediaPlayer.getDuration()+"---"+mediaPlayer+"mediaPlayer.getCurrentPosition()");
+//                showPlayView();
                 if (mediaPlayer != null && mediaPlayer.getDuration() > 30
                         && mediaPlayer.getCurrentPosition() < mediaPlayer.getDuration()) {
                     mediaPlayer.seekTo(mediaPlayer.getCurrentPosition() - 20);
                 }
             }
+        }
     }
 
 
@@ -505,7 +517,9 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
         Log.e(TAG, "onSurfaceTextureDestroyed");
-        return false;
+        showDisplay(null);
+        surface.release();
+        return true;
     }
 
     @Override
@@ -521,6 +535,8 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
         Log.e(TAG, "onBufferingUpdate");
         mBuffterPoint = i;
     }
+
+    protected long mSeekOnStart = -1; //从哪个开始播放
 
     /**
      * 播放器播放完成
@@ -559,20 +575,36 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         Log.e(TAG, "onPrepared");
+
+        if (isPlaying()) {
+            return;
+        }
+        showPlayView();
+        showPauseView(true);
+        if (mediaPlayer != null) {
+            mediaPlayer.start();
+        }
+        setStateAndUi(STATE_PLAYING);
+
+        if (mediaPlayer != null && mSeekOnStart > 0) {
+            mediaPlayer.seekTo(mSeekOnStart);
+            mSeekOnStart = 0;
+        }
+
+
 //        if (isPlaying()) {
 //            return;
 //        }
-        showPlayView();
-        showPauseView(true);
-        mediaPlayer = (IjkMediaPlayer) iMediaPlayer;
-        if (mediaPlayer != null) {
-            mediaPlayer.setOnBufferingUpdateListener(this);
-            mCurrentCount = 0;
-            if (listener != null) {
-                listener.onAdVideoLoadSuccess();
-            }
+//
+//        mediaPlayer = (IjkExoMediaPlayer) iMediaPlayer;
+//        if (mediaPlayer != null) {
+//            mediaPlayer.setOnBufferingUpdateListener(this);
+//            mCurrentCount = 0;
+//            if (listener != null) {
+//                listener.onAdVideoLoadSuccess();
+//            }
 //            decideCanPlay();
-        }
+//        }
         mHadPlay = true;
     }
 
@@ -830,11 +862,12 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
      * 移除没用的
      */
     private void removeVideo(ViewGroup vp, int id) {
+        Log.e(TAG, "removeView:" + vp.getChildCount() + "---" + id);
         View old = vp.findViewById(id);
         if (old != null) {
             if (old.getParent() != null) {
                 ViewGroup viewGroup = (ViewGroup) old.getParent();
-                vp.removeView(viewGroup);
+                viewGroup.removeView(old);
             }
         }
     }
@@ -921,9 +954,8 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
         mListItemSize = new int[2];
 
         final ViewGroup vp = getViewGroup();
-        vp.removeAllViews();
 
-//        removeVideo(vp, FULLSCREEN_ID);
+        removeVideo(vp, this.getId());
 
 
         //处理暂停的逻辑
@@ -936,25 +968,24 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
 
         saveLocationStatus(context, statusBar, actionBar);
 
-//        boolean hadNewConstructor = true;
-//        try {
-//            VideoPlayerView.this.getClass().getConstructor(Context.class, ViewGroup.class);
-//        } catch (Exception e) {
-//            hadNewConstructor = false;
-//        }
+        boolean hadNewConstructor = true;
+        try {
+            VideoPlayerView.this.getClass().getConstructor(Context.class, Boolean.class);
+        } catch (Exception e) {
+            hadNewConstructor = false;
+        }
 
         try {
             //通过被重载的不同构造器来选择
             Constructor<VideoPlayerView> constructor;
             final VideoPlayerView gsyVideoPlayer;
-//            if (!hadNewConstructor) {
-//                constructor = (Constructor<VideoPlayerView>) VideoPlayerView.this.getClass().getConstructor(Context.class);
-//                gsyVideoPlayer = constructor.newInstance(getContext());
-//            } else {
+            if (!hadNewConstructor) {
+                constructor = (Constructor<VideoPlayerView>) VideoPlayerView.this.getClass().getConstructor(Context.class);
+                gsyVideoPlayer = constructor.newInstance(getContext());
+            } else {
             constructor = (Constructor<VideoPlayerView>) VideoPlayerView.this.getClass().getConstructor(Context.class, Boolean.class);
             gsyVideoPlayer = constructor.newInstance(getContext(), true);
-//            }
-//            gsyVideoPlayer = new VideoPlayerView(getContext(), mViewGroup);
+            }
             gsyVideoPlayer.setId(FULLSCREEN_ID);
             gsyVideoPlayer.setIfCurrentIsFullscreen(true);
             gsyVideoPlayer.setLooping(isLooping());
@@ -968,8 +999,9 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
 
             final RelativeLayout.LayoutParams lpParent = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             final RelativeLayout frameLayout = new RelativeLayout(context);
-            frameLayout.setBackgroundColor(Color.BLACK);
+//            frameLayout.setBackgroundColor(Color.BLACK);
             RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(getWidth(), getHeight());
+            gsyVideoPlayer.setViewGroup(frameLayout);
             frameLayout.addView(gsyVideoPlayer, lp);
             vp.addView(frameLayout, lpParent);
             gsyVideoPlayer.setVisibility(INVISIBLE);
@@ -979,8 +1011,7 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
             gsyVideoPlayer.mHadPlay = mHadPlay;
             gsyVideoPlayer.mFullPauseBitmap = mFullPauseBitmap;
             gsyVideoPlayer.setDataUrl(mUrl);
-            Log.e(TAG, mUrl);
-            gsyVideoPlayer.setStateAndUi(playerState);
+            gsyVideoPlayer.setStateAndUi(STATE_IDLE);
             gsyVideoPlayer.addTextureView();
 //
 //            gsyVideoPlayer.getFullscreenButton().setImageResource(getShrinkImageRes());
@@ -1015,9 +1046,9 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
      */
     protected void addTextureView() {
         Log.e(TAG, "addTextureView:" + mTextureViewGroup);
-//        if (mViewGroup.getChildCount() > 0) {
-//            mTextureViewGroup.removeAllViews();
-//        }
+        if (mTextureViewGroup.getChildCount() > 0) {
+            mTextureViewGroup.removeAllViews();
+        }
         mVideoView = null;
         mVideoView = new GSYTextureView(getContext());
         mVideoView.setSurfaceTextureListener(this);
@@ -1036,7 +1067,13 @@ public class VideoPlayerView extends RelativeLayout implements IMediaPlayer.OnPr
     protected void setStateAndUi(int state) {
         playerState = state;
         switch (playerState) {
+
+
             case STATE_IDLE:
+//                if (mediaPlayer != null) {
+//                    mediaPlayer.release();
+//                }
+                setNeedMute(false);
                 mBuffterPoint = 0;
                 if (mAudioManager != null) {
                     mAudioManager.abandonAudioFocus(onAudioFocusChangeListener);

@@ -9,7 +9,7 @@ import android.util.Log;
 import android.widget.RelativeLayout;
 
 public class MainActivity extends AppCompatActivity {
-
+    protected static final int FULLSCREEN_ID = 85597;
     private VideoPlayerView mVideoPlayerView;
 
     @Override
@@ -19,6 +19,7 @@ public class MainActivity extends AppCompatActivity {
         Log.e("LIPY","onCreate");
         RelativeLayout layout = (RelativeLayout) findViewById(R.id.viewgroup);
         mVideoPlayerView = new VideoPlayerView(this, true);
+        mVideoPlayerView.setId(FULLSCREEN_ID);
         mVideoPlayerView.setViewGroup(layout);
         mVideoPlayerView.setDataUrl("http://baobab.wdjcdn.com/14564977406580.mp4");
         layout.addView(mVideoPlayerView);
