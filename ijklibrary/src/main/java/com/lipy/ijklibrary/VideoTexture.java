@@ -5,29 +5,29 @@ import android.util.AttributeSet;
 import android.view.TextureView;
 
 /**
- * 用于显示video的，做了横屏与竖屏的匹配，还有需要rotation需求的
- * Created by shuyu on 2016/11/11.
+ * 横屏与竖屏的匹配
+ * Created by lipy on 2017/3/20.
  */
 
-public class GSYTextureView extends TextureView {
+public class VideoTexture extends TextureView {
 
     private int sizeW;
 
     private int sizeH;
 
-    public GSYTextureView(Context context) {
+    public VideoTexture(Context context) {
         super(context);
     }
 
-    public GSYTextureView(Context context, AttributeSet attrs) {
+    public VideoTexture(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
 
-        int videoWidth = VideoPlayerView.mCurrentVideoWidth;
-        int videoHeight = VideoPlayerView.mCurrentVideoHeight;
+        int videoWidth = VideoPlayerManager.getInstance(getContext()).getCurrentVideoWidth();
+        int videoHeight = VideoPlayerManager.getInstance(getContext()).getCurrentVideoHeight();
 
         int width = getDefaultSize(videoWidth, widthMeasureSpec);
         int height = getDefaultSize(videoHeight, heightMeasureSpec);
@@ -102,11 +102,11 @@ public class GSYTextureView extends TextureView {
 
         //如果设置了比例
 //        if (GSYVideoType.getShowType() == GSYVideoType.SCREEN_TYPE_16_9) {
-            if (height > width) {
-                width = height * 9 / 16;
-            } else {
-                height = width * 9 / 16;
-            }
+        if (height > width) {
+            width = height * 9 / 16;
+        } else {
+            height = width * 9 / 16;
+        }
 //        } else if (GSYVideoType.getShowType() == GSYVideoType.SCREEN_TYPE_4_3) {
 //            if (height > width) {
 //                width = height * 3 / 4;

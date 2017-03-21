@@ -11,7 +11,8 @@ import tv.danmaku.ijk.media.player.IMediaPlayer;
 import static android.content.ContentValues.TAG;
 
 /**
- * Created by Administrator on 2017/3/20.
+ * IjkPlayer封装类
+ * Created by lipy on 2017/3/20.
  */
 
 public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMediaPlayer.OnCompletionListener,
@@ -20,11 +21,10 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
 
     private static VideoPlayerManager videoManager;
     private static IjkExoMediaPlayer mediaPlayer;
-    private VideoPlayerListener_ mListener;
+    private VideoPlayerManagerListener mListener;
     private static int mCurrentVideoWidth = 0;
     private static int mCurrentVideoHeight = 0;
     private int mRotate = 0; //针对某些视频的旋转信息做了旋转处理
-    //    private Context mContext;
     private long mSeekOnStart = -1; //从哪个开始播放
 
     public static synchronized VideoPlayerManager getInstance(Context context) {
@@ -35,12 +35,15 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     }
 
     private VideoPlayerManager(Context context) {
-//        mContext = context;
         mediaPlayer = new IjkExoMediaPlayer(context);
         prepare();
     }
 
-    public void setManagerListener(VideoPlayerListener_ videoPlayerListener) {
+    public IjkExoMediaPlayer getMediaPlayer() {
+        return mediaPlayer;
+    }
+
+    public void setManagerListener(VideoPlayerManagerListener videoPlayerListener) {
         mListener = videoPlayerListener;
     }
 
@@ -88,7 +91,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         Log.e(TAG, "onPrepared");
-
         if (isPlaying()) {
             return;
         }
@@ -122,7 +124,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     }
 
     public void prepare() {
-
         createMediaPlayer();
     }
 
@@ -152,11 +153,11 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         this.mSeekOnStart = mSeekOnStart;
     }
 
-    public static int getmCurrentVideoHeight() {
+    public int getCurrentVideoHeight() {
         return mCurrentVideoHeight;
     }
 
-    public static int getmCurrentVideoWidth() {
+    public int getCurrentVideoWidth() {
         return mCurrentVideoWidth;
     }
 
@@ -164,42 +165,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         return mRotate;
     }
 
-    public void stop() {
-
-        Log.e(TAG, "stop");
-        if (mediaPlayer != null) {
-            mediaPlayer.reset();
-            mediaPlayer.setOnSeekCompleteListener(null);
-            mediaPlayer.stop();
-            mediaPlayer.release();
-            mediaPlayer = null;
-        }
-        if (mListener != null) {
-            mListener.stop();
-        }
-    }
-
-    //恢复播放
-    public void resume() {
-
-        if (mListener != null) {
-            mListener.resume();
-        }
-    }
-
-    public void load(String url) {
-        Log.e(TAG, "load");
-        if (mListener != null) {
-            mListener.load();
-        }
-        try {
-            mediaPlayer.setDataSource(url);
-            mediaPlayer.prepareAsync();//异步加载视频资源
-        } catch (Exception e) {
-            stop();
-            e.printStackTrace();
-        }
-    }
 
     public int getCurrentPosition() {
         if (this.mediaPlayer != null) {
@@ -215,32 +180,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         return 0;
     }
 
-    public void pause() {
-        Log.e(TAG, "pause STATE_PLAYING");
-        if (mListener != null) {
-            mListener.pause();
-        }
-        if (isPlaying()) {
-            mediaPlayer.pause();
-        }
-    }
-
-    public void start() {
-        mediaPlayer.start();
-    }
-
-    public void playBack() {
-        Log.e(TAG, "playBack");
-        if (mListener != null) {
-            mListener.playBack();
-        }
-        if (mediaPlayer != null) {
-            mediaPlayer.setOnSeekCompleteListener(null);
-            mediaPlayer.seekTo(0);
-            mediaPlayer.pause();
-        }
-    }
-
     public void showDisplay(Surface surface) {
         if (surface == null && mediaPlayer != null) {
             mediaPlayer.setSurface(null);
@@ -251,8 +190,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
             }
             Log.e(TAG, "showDisplay: mediaPlayer+" + mediaPlayer);
             if (mediaPlayer instanceof IjkExoMediaPlayer) {
-                Log.e(TAG, "showDisplay:" + mediaPlayer.getDuration() + "---" + mediaPlayer + "mediaPlayer.getCurrentPosition()");
-//                showPlayView();
                 if (mediaPlayer != null && mediaPlayer.getDuration() > 30
                         && mediaPlayer.getCurrentPosition() < mediaPlayer.getDuration()) {
                     mediaPlayer.seekTo(mediaPlayer.getCurrentPosition() - 20);
@@ -262,7 +199,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     }
 
     //是否静音
-    public void setNeedMute(boolean needMute) {
+    public void setMute(boolean needMute) {
         if (mediaPlayer != null) {
             if (needMute) {
                 mediaPlayer.setVolume(0, 0);
@@ -271,17 +208,4 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
             }
         }
     }
-
-    //销毁播放器
-    public void destory() {
-        Log.e(TAG, "destory");
-        mediaPlayer.release();
-        mediaPlayer = null;
-        if (mListener != null) {
-            mListener.destory();
-        }
-
-    }
-
-
 }

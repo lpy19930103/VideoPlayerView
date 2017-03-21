@@ -1,6 +1,11 @@
 package com.lipy.ijklibrary;
 
 
+import com.lipy.ijklibrary.listener.FrameImageLoadListener;
+import com.lipy.ijklibrary.listener.ImageLoaderListener;
+import com.lipy.ijklibrary.listener.VideoPlayerListener;
+import com.lipy.ijklibrary.utils.OrientationUtils;
+
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -13,6 +18,7 @@ import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Build;
@@ -39,12 +45,10 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 
-import com.lipy.ijklibrary.listener.FrameImageLoadListener;
-import com.lipy.ijklibrary.listener.ImageLoaderListener;
-import com.lipy.ijklibrary.listener.VideoPlayerListener;
-import com.lipy.ijklibrary.utils.OrientationUtils;
-
 import java.lang.reflect.Constructor;
+
+import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
+import tv.danmaku.ijk.media.player.IMediaPlayer;
 
 
 /**
@@ -52,7 +56,7 @@ import java.lang.reflect.Constructor;
  * Created by lipy on 2017/3/12.
  */
 
-public class VideoPlayerView extends RelativeLayout implements VideoPlayerListener_, View.OnClickListener, TextureView.SurfaceTextureListener {
+public class VideoPlayerView extends RelativeLayout implements VideoPlayerManagerListener, View.OnClickListener, TextureView.SurfaceTextureListener {
 
 
     private static final String TAG = "VideoPlayerView";
@@ -82,7 +86,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
     private View view;
     private ViewGroup mViewGroup;
     private AudioManager mAudioManager;
-    private GSYTextureView mVideoView;
+    private VideoTexture mVideoView;
     private Button mMiniPlayBtn;
     private ImageView mFullBtn;
     private ImageView mLoadingBar;
@@ -111,9 +115,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
 
         }
     };
-    public static int mCurrentVideoWidth = 0;
-    public static int mCurrentVideoHeight = 0;
     private RelativeLayout mTextureViewGroup;
+    private IjkExoMediaPlayer mMediaPlayer;
+    private VideoPlayerManager mPlayerManager;
 
     public VideoPlayerView(Context context, Boolean fullFlag) {
         super(context);
@@ -122,12 +126,11 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
         initConfig();
         initView();
         registerBroadcastReceiver();
-        VideoPlayerManager.getInstance(context).setManagerListener(this);
+
     }
 
     public void setViewGroup(ViewGroup viewGroup) {
         mViewGroup = viewGroup;
-        Log.e(TAG, "setViewGroup:" + mViewGroup);
     }
 
     public VideoPlayerView(Context context, ViewGroup viewGroup) {
@@ -140,6 +143,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
     }
 
     private void initConfig() {
+        mPlayerManager = VideoPlayerManager.getInstance(getContext());
+        mMediaPlayer = mPlayerManager.getMediaPlayer();
+        mPlayerManager.setManagerListener(this);
         DisplayMetrics displayMetrics = new DisplayMetrics();
         WindowManager windowManager = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
         windowManager.getDefaultDisplay().getMetrics(displayMetrics);
@@ -149,7 +155,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
 
     private void initView() {
         view = LayoutInflater.from(getContext()).inflate(R.layout.xadsdk_video_player, this);
-        mVideoView = new GSYTextureView(getContext());
+        mVideoView = new VideoTexture(getContext());
         mTextureViewGroup = (RelativeLayout) view.findViewById(R.id.textureViewGroup);
         mTextureViewGroup.addView(mVideoView);
         mVideoView.setOnClickListener(this);
@@ -273,92 +279,151 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
     }
 
     //加载视频url
-    @Override
     public void load() {
         if (playerState != STATE_IDLE) {
             return;
         }
+        Log.e(TAG, "do play url = " + this.mUrl);
         showLoadingView();
-        setCurrentPlayState(STATE_IDLE);
+        try {
+            setCurrentPlayState(STATE_IDLE);
+            mPlayerManager.setMute(true);
+            mMediaPlayer.setDataSource(this.mUrl);
+            mMediaPlayer.prepareAsync(); //开始异步加载
+        } catch (Exception e) {
+            Log.e(TAG, e.getMessage());
+            stop(); //error以后重新调用stop加载
+        }
     }
 
     //暂停
-    @Override
     public void pause() {
-        if (playerState != STATE_PLAYING) {
+
+        if (this.playerState != STATE_PLAYING) {
             return;
         }
-        Log.e(TAG, "pause");
+        Log.e(TAG, "do pause");
         setCurrentPlayState(STATE_PAUSING);
-        showPauseView(false);
-        handler.removeCallbacksAndMessages(null);
+        if (mMediaPlayer.isPlaying()) {
+            mMediaPlayer.pause();
+            if (!this.canPlay) {
+                this.mMediaPlayer.seekTo(0);
+            }
+        }
+        this.showPauseView(false);
+        mHandler.removeCallbacksAndMessages(null);
     }
 
     //恢复播放
-    @Override
     public void resume() {
+
         if (playerState != STATE_PAUSING) {
             return;
         }
-        Log.e(TAG, "resume");
-        Log.e(TAG, "resume isPlaying:" + VideoPlayerManager.getInstance(getContext()).isPlaying());
-        if (!VideoPlayerManager.getInstance(getContext()).isPlaying()) {
+        Log.e(TAG, "do resume");
+        if (!mMediaPlayer.isPlaying()) {
             entryResumeState();
+            mMediaPlayer.setOnSeekCompleteListener(null);
+            mMediaPlayer.start();
+            mHandler.sendEmptyMessage(TIME_MSG);
             showPauseView(true);
-            VideoPlayerManager.getInstance(getContext()).start();
-            handler.sendEmptyMessage(TIME_MSG);
         } else {
             showPauseView(false);
         }
 
+        if (playerState != STATE_PAUSING) {
+            return;
+        }
     }
 
     //视频停止
-    @Override
     public void stop() {
-        handler.removeCallbacksAndMessages(null);
+        Log.e(TAG, " do stop");
+        if (this.mMediaPlayer != null) {
+            this.mMediaPlayer.reset();
+            this.mMediaPlayer.setOnSeekCompleteListener(null);
+            this.mMediaPlayer.stop();
+            this.mMediaPlayer.release();
+            this.mMediaPlayer = null;
+        }
+        mHandler.removeCallbacksAndMessages(null);
         setCurrentPlayState(STATE_IDLE);
-        //retry
-        if (mCurrentCount < LOAD_TOTAL_COUNT) {
+        if (mCurrentCount < LOAD_TOTAL_COUNT) { //满足重新加载的条件
             mCurrentCount += 1;
-            VideoPlayerManager.getInstance(getContext()).load(mUrl);
+            load();
         } else {
-            showPauseView(false);//显示暂停状态
+            showPauseView(false); //显示暂停状态
         }
     }
 
     //播放完成后回到初始状态
-    @Override
     public void playBack() {
-        Log.e(TAG, "playBack");
+        Log.e(TAG, " do playBack");
         setCurrentPlayState(STATE_PAUSING);
-        handler.removeCallbacksAndMessages(null);
-        showPauseView(false);
-
+        mHandler.removeCallbacksAndMessages(null);
+        if (mMediaPlayer != null) {
+            mMediaPlayer.setOnSeekCompleteListener(null);
+            mMediaPlayer.seekTo(0);
+            mMediaPlayer.pause();
+        }
+        this.showPauseView(false);
     }
 
     //销毁播放器
-    @Override
     public void destory() {
-
-    }
-
-    public void destoryView() {
-        mHadPlay = true;
+        Log.e(TAG, " do destroy");
+        if (this.mMediaPlayer != null) {
+            this.mMediaPlayer.setOnSeekCompleteListener(null);
+            this.mMediaPlayer.stop();
+            this.mMediaPlayer.release();
+            this.mMediaPlayer = null;
+        }
+        mHandler.removeCallbacksAndMessages(null); //release all message and runnable
         unRegisterBroadcastReceiver();
-        VideoPlayerManager.getInstance(getContext()).destory();
+        setCurrentPlayState(STATE_IDLE);
+        mCurrentCount = 0;
+        setIsComplete(false);
+        setIsRealPause(false);
+        showPauseView(false); //除了播放和loading外其余任何状态都显示pause
     }
 
-    @Override
-    public void seekAndResume(int time) {
+    //跳到指定点播放视频
+    public void seekAndResume(int position) {
+
+        showPauseView(true);
+        entryResumeState();
+        VideoPlayerManager.getInstance(getContext()).getMediaPlayer().seekTo(position);
+        VideoPlayerManager.getInstance(getContext()).getMediaPlayer().setOnSeekCompleteListener(new IMediaPlayer.OnSeekCompleteListener() {
+            @Override
+            public void onSeekComplete(IMediaPlayer iMediaPlayer) {
+                Log.d(TAG, "do seek and resume");
+                iMediaPlayer.start();
+                mHandler.sendEmptyMessage(TIME_MSG);
+            }
+        });
 
     }
 
-    @Override
-    public void seekAndPause(int time) {
+    //跳到指定点暂停视频
+    public void seekAndPause(int position) {
+        if (this.playerState != STATE_PLAYING) {
+            return;
+        }
+        showPauseView(false);
+        setCurrentPlayState(STATE_PAUSING);
+        if (VideoPlayerManager.getInstance(getContext()).isPlaying()) {
+            VideoPlayerManager.getInstance(getContext()).getMediaPlayer().seekTo(position);
+            VideoPlayerManager.getInstance(getContext()).getMediaPlayer().setOnSeekCompleteListener(new IMediaPlayer.OnSeekCompleteListener() {
+                @Override
+                public void onSeekComplete(IMediaPlayer iMediaPlayer) {
+                    Log.e(TAG, "do seek and pause");
+                    iMediaPlayer.pause();
+                    mHandler.removeCallbacksAndMessages(null);
+                }
 
+            });
+        }
     }
-
 
     /**
      * view显示改变时
@@ -389,10 +454,10 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
             if (playerState == STATE_PAUSING) {
                 if (getVisiblePercent(mViewGroup)
                         > VIDEO_SCREEN_PERCENT) {
-                    VideoPlayerManager.getInstance(getContext()).resume();
+                    resume();
                 }
             } else {
-                VideoPlayerManager.getInstance(getContext()).load(mUrl);
+                load();
             }
         } else if (v == mVideoView) {
             if (listener != null) {
@@ -454,7 +519,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
         }
         setIsComplete(true);
         setIsRealPause(true);
-        VideoPlayerManager.getInstance(getContext()).playBack();
+        playBack();
     }
 
     /**
@@ -470,7 +535,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
             }
             showPauseView(false);
         }
-        VideoPlayerManager.getInstance(getContext()).load(mUrl);
+        load();
     }
 
     /**
@@ -480,7 +545,10 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
     public void onPrepared() {
         showPauseView(true);
         entryResumeState();
-        mHadPlay = true;
+    }
+
+    public void setId() {
+        setId(FULLSCREEN_ID);
     }
 
     /**
@@ -492,20 +560,26 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
             //主动锁屏时 pause, 主动解锁屏幕时，resume
             switch (intent.getAction()) {
                 case Intent.ACTION_USER_PRESENT:
-                    Log.e(TAG, "playerState:STATE_PAUSING"+"--"+STATE_PLAYING);
+                    Log.e(TAG, "playerState:STATE_PAUSING" + "--" + STATE_PLAYING);
                     if (playerState == STATE_PAUSING) {
-                        if (mIsRealPause) {
-                            //手动点的暂停，回来后还暂停
-                            VideoPlayerManager.getInstance(getContext()).pause();
+                        if (isIfCurrentIsFullscreen()) {
+                            setCurrentPlayState(STATE_PAUSING);
+                            resume();
                         } else {
-                            decideCanPlay();
+                            if (mIsRealPause) {
+                                //手动点的暂停，回来后还暂停
+                                pause();
+                            } else {
+                                decideCanPlay();
+                            }
                         }
                     }
+
                     break;
                 case Intent.ACTION_SCREEN_OFF:
-                    Log.e(TAG, "playerState:STATE_PLAYING"+"--"+STATE_PLAYING);
+                    Log.e(TAG, "playerState:STATE_PLAYING" + "--" + STATE_PLAYING);
                     if (playerState == STATE_PLAYING) {
-                        VideoPlayerManager.getInstance(getContext()).pause();
+                        pause();
                     }
                     break;
             }
@@ -533,10 +607,10 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
         if (getVisiblePercent(mViewGroup) > VIDEO_SCREEN_PERCENT) {
             //来回切换页面时，只有 >50,且满足自动播放条件才自动播放
             setCurrentPlayState(STATE_PAUSING);
-            VideoPlayerManager.getInstance(getContext()).resume();
+            resume();
         } else {
             setCurrentPlayState(STATE_PLAYING);
-            VideoPlayerManager.getInstance(getContext()).pause();
+            pause();
         }
     }
 
@@ -726,62 +800,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
         }
     }
 
-    protected boolean mHadPlay = false;//是否播放过
-
-    protected static final int FULLSCREEN_ID = 85597;
-    protected Bitmap mFullPauseBitmap = null;//暂停时的全屏图片；
-
-    /**
-     * 全屏的暂停返回的时候返回页面不黑色
-     */
-    private void pauseFullBackCoverLogic(VideoPlayerView gsyVideoPlayer) {
-        //如果是暂停状态
-        if (gsyVideoPlayer.playerState == STATE_PAUSING
-                && gsyVideoPlayer.mVideoView != null) {
-            //全屏的位图还在，说明没播放，直接用原来的
-            if (gsyVideoPlayer.mFullPauseBitmap != null
-                    && !gsyVideoPlayer.mFullPauseBitmap.isRecycled()) {
-                mFullPauseBitmap = gsyVideoPlayer.mFullPauseBitmap;
-            } else {
-                //不在了说明已经播放过，还是暂停的话，我们拿回来就好
-                try {
-                    mFullPauseBitmap = mVideoView.getBitmap(mVideoView.getSizeW(), mVideoView.getSizeH());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    mFullPauseBitmap = null;
-                }
-            }
-        }
-    }
-
-    /**
-     * 全屏的暂停的时候返回页面不黑色
-     */
-    private void pauseFullCoverLogic() {
-        if (playerState == STATE_PAUSING && mVideoView != null
-                && (mFullPauseBitmap == null || mFullPauseBitmap.isRecycled())) {
-            try {
-                mFullPauseBitmap = mVideoView.getBitmap(mVideoView.getSizeW(), mVideoView.getSizeH());
-            } catch (Exception e) {
-                e.printStackTrace();
-                mFullPauseBitmap = null;
-            }
-        }
-    }
-
-
-    protected boolean mLooping = false;//循环
-
-    public boolean isLooping() {
-        return mLooping;
-    }
-
-    /**
-     * 设置循环
-     */
-    public void setLooping(boolean looping) {
-        this.mLooping = looping;
-    }
+    private static final int FULLSCREEN_ID = 0x0123;
 
     /**
      * 利用window层播放全屏效果
@@ -807,16 +826,11 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
 
         final ViewGroup vp = getViewGroup();
 
-        removeVideo(vp, this.getId());
-
-
-        //处理暂停的逻辑
-        pauseFullCoverLogic();
+        removeVideo(vp, FULLSCREEN_ID);
 
         if (mTextureViewGroup.getChildCount() > 0) {
             mTextureViewGroup.removeAllViews();
         }
-
 
         saveLocationStatus(context, statusBar, actionBar);
 
@@ -830,42 +844,31 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
         try {
             //通过被重载的不同构造器来选择
             Constructor<VideoPlayerView> constructor;
-            final VideoPlayerView gsyVideoPlayer;
+            final VideoPlayerView videoPlayerView;
             if (!hadNewConstructor) {
                 constructor = (Constructor<VideoPlayerView>) VideoPlayerView.this.getClass().getConstructor(Context.class);
-                gsyVideoPlayer = constructor.newInstance(getContext());
+                videoPlayerView = constructor.newInstance(getContext());
             } else {
                 constructor = (Constructor<VideoPlayerView>) VideoPlayerView.this.getClass().getConstructor(Context.class, Boolean.class);
-                gsyVideoPlayer = constructor.newInstance(getContext(), true);
+                videoPlayerView = constructor.newInstance(getContext(), true);
             }
-            gsyVideoPlayer.setId(FULLSCREEN_ID);
-            gsyVideoPlayer.setIfCurrentIsFullscreen(true);
-            gsyVideoPlayer.setLooping(isLooping());
-
-//            WindowManager wm = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
-//            int w = wm.getDefaultDisplay().getWidth();
-//            int h = wm.getDefaultDisplay().getHeight();
-//            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(h, w);
-//            lp.setMargins((w - h) / 2, -(w - h) / 2, 0, 0);
-//            vp.addView(gsyVideoPlayer, lp);
-
-            final RelativeLayout.LayoutParams lpParent = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            final RelativeLayout frameLayout = new RelativeLayout(context);
-            frameLayout.setBackgroundColor(Color.BLACK);
+            videoPlayerView.setId(FULLSCREEN_ID);
+            videoPlayerView.setIfCurrentIsFullscreen(true);
+            RelativeLayout.LayoutParams lpParent = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            RelativeLayout relativeLayout = new RelativeLayout(context);
+            relativeLayout.setBackgroundColor(Color.BLACK);
             RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(getWidth(), getHeight());
-            gsyVideoPlayer.setViewGroup(frameLayout);
-            frameLayout.addView(gsyVideoPlayer, lp);
-            vp.addView(frameLayout, lpParent);
-            gsyVideoPlayer.setVisibility(INVISIBLE);
-            frameLayout.setVisibility(INVISIBLE);
-            resolveFullVideoShow(context, gsyVideoPlayer, frameLayout);
+            videoPlayerView.setViewGroup(relativeLayout);
+            relativeLayout.addView(videoPlayerView, lp);
+            vp.addView(relativeLayout, lpParent);
+            videoPlayerView.setVisibility(INVISIBLE);
+            relativeLayout.setVisibility(INVISIBLE);
+            resolveFullVideoShow(context, videoPlayerView, relativeLayout);
 
-            gsyVideoPlayer.mHadPlay = mHadPlay;
-            gsyVideoPlayer.mFullPauseBitmap = mFullPauseBitmap;
-            gsyVideoPlayer.setDataUrl(mUrl);
-            gsyVideoPlayer.addTextureView();
-            VideoPlayerManager.getInstance(getContext()).setManagerListener(gsyVideoPlayer);
-            return gsyVideoPlayer;
+//            videoPlayerView.setDataUrl(mUrl);
+            videoPlayerView.addTextureView();
+            VideoPlayerManager.getInstance(getContext()).setManagerListener(videoPlayerView);
+            return videoPlayerView;
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -883,7 +886,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerListen
             mTextureViewGroup.removeAllViews();
         }
         mVideoView = null;
-        mVideoView = new GSYTextureView(getContext());
+        mVideoView = new VideoTexture(getContext());
         mVideoView.setSurfaceTextureListener(this);
         mVideoView.setRotation(mRotate);
 
