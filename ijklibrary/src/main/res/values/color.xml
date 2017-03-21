@@ -2,4 +2,5 @@
 <resources>
 
     <color name="xadsdk_frame_bg">#e5e5e5</color>
+    <color name="style_color">#005fff</color>
 </resources>

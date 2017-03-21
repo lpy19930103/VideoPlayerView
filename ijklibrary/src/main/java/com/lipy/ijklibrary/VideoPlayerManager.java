@@ -19,6 +19,8 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         IMediaPlayer.OnBufferingUpdateListener, IMediaPlayer.OnSeekCompleteListener, IMediaPlayer.OnErrorListener,
         IMediaPlayer.OnVideoSizeChangedListener, IMediaPlayer.OnInfoListener {
 
+
+    private AudioManager mAudioManager;
     private static VideoPlayerManager videoManager;
     private static IjkExoMediaPlayer mediaPlayer;
     private VideoPlayerManagerListener mListener;
@@ -36,7 +38,13 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
 
     private VideoPlayerManager(Context context) {
         mediaPlayer = new IjkExoMediaPlayer(context);
+        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+
         prepare();
+    }
+
+    public AudioManager getAudioManager() {
+        return mAudioManager;
     }
 
     public IjkExoMediaPlayer getMediaPlayer() {
@@ -94,9 +102,9 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         if (isPlaying()) {
             return;
         }
-        if (mediaPlayer != null) {
-            mediaPlayer.start();
-        }
+//        if (mediaPlayer != null) {
+//            mediaPlayer.start();
+//        }
         if (mediaPlayer != null && mSeekOnStart > 0) {
             mediaPlayer.seekTo(mSeekOnStart);
             mSeekOnStart = 0;
@@ -145,14 +153,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         return mediaPlayer != null && mediaPlayer.isPlaying();
     }
 
-    public long getmSeekOnStart() {
-        return mSeekOnStart;
-    }
-
-    public void setmSeekOnStart(long mSeekOnStart) {
-        this.mSeekOnStart = mSeekOnStart;
-    }
-
     public int getCurrentVideoHeight() {
         return mCurrentVideoHeight;
     }
@@ -161,7 +161,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         return mCurrentVideoWidth;
     }
 
-    public int getmRotate() {
+    public int getRotate() {
         return mRotate;
     }
 
@@ -199,13 +199,21 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     }
 
     //是否静音
-    public void setMute(boolean needMute) {
-        if (mediaPlayer != null) {
-            if (needMute) {
-                mediaPlayer.setVolume(0, 0);
-            } else {
-                mediaPlayer.setVolume(1, 1);
-            }
+//    public void setMute(boolean needMute) {
+//        if (mediaPlayer != null) {
+//            if (needMute) {
+//                mediaPlayer.setVolume(0, 0);
+//            } else {
+//                mediaPlayer.setVolume(1, 1);
+//            }
+//        }
+//    }
+
+    public void setMute(boolean mute) {
+        Log.e(TAG, "mute");
+        if (mediaPlayer != null && mAudioManager != null) {
+            float volume = mute ? 0.0f : 1.0f;
+            mediaPlayer.setVolume(volume, volume);
         }
     }
 }
