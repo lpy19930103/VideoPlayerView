@@ -5,8 +5,8 @@ import android.media.AudioManager;
 import android.util.Log;
 import android.view.Surface;
 
-import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
+import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 import static android.content.ContentValues.TAG;
 
@@ -22,7 +22,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
 
     private AudioManager mAudioManager;
     private static VideoPlayerManager videoManager;
-    private static IjkExoMediaPlayer mediaPlayer;
+    private static IjkMediaPlayer mediaPlayer;
     private VideoPlayerManagerListener mListener;
     private static int mCurrentVideoWidth = 0;
     private static int mCurrentVideoHeight = 0;
@@ -37,7 +37,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     }
 
     private VideoPlayerManager(Context context) {
-        mediaPlayer = new IjkExoMediaPlayer(context);
+        mediaPlayer = new IjkMediaPlayer();
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 
         prepare();
@@ -47,7 +47,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         return mAudioManager;
     }
 
-    public IjkExoMediaPlayer getMediaPlayer() {
+    public IjkMediaPlayer getMediaPlayer() {
         return mediaPlayer;
     }
 
@@ -59,12 +59,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
      * 播放器缓冲更新
      */
 
-    @Override
-    public void onBufferingUpdate(IMediaPlayer iMediaPlayer, int i) {
-        if (mListener != null) {
-            mListener.onBufferingUpdate(i);
-        }
-    }
 
     /**
      * 播放器播放完成
@@ -99,9 +93,6 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         Log.e(TAG, "onPrepared");
-        if (isPlaying()) {
-            return;
-        }
 //        if (mediaPlayer != null) {
 //            mediaPlayer.start();
 //        }
@@ -135,7 +126,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         createMediaPlayer();
     }
 
-    private IjkExoMediaPlayer createMediaPlayer() {
+    private IjkMediaPlayer createMediaPlayer() {
         mediaPlayer.reset();
         mediaPlayer.setOnCompletionListener(this);
         mediaPlayer.setOnBufferingUpdateListener(this);
@@ -167,7 +158,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
 
 
     public int getCurrentPosition() {
-        if (this.mediaPlayer != null) {
+        if (mediaPlayer != null) {
             return (int) mediaPlayer.getCurrentPosition();
         }
         return 0;
@@ -189,7 +180,7 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
                 mediaPlayer.setSurface(holder);
             }
             Log.e(TAG, "showDisplay: mediaPlayer+" + mediaPlayer);
-            if (mediaPlayer instanceof IjkExoMediaPlayer) {
+            if (mediaPlayer instanceof IjkMediaPlayer) {
                 if (mediaPlayer != null && mediaPlayer.getDuration() > 30
                         && mediaPlayer.getCurrentPosition() < mediaPlayer.getDuration()) {
                     mediaPlayer.seekTo(mediaPlayer.getCurrentPosition() - 20);
@@ -210,10 +201,16 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
 //    }
 
     public void setMute(boolean mute) {
-        Log.e(TAG, "mute");
         if (mediaPlayer != null && mAudioManager != null) {
             float volume = mute ? 0.0f : 1.0f;
             mediaPlayer.setVolume(volume, volume);
+        }
+    }
+
+    @Override
+    public void onBufferingUpdate(IMediaPlayer iMediaPlayer, int i) {
+        if (mListener != null) {
+            mListener.onBufferingUpdate(i);
         }
     }
 }

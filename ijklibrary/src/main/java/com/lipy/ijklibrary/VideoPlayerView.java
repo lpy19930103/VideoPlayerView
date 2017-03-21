@@ -21,6 +21,7 @@ import android.graphics.drawable.AnimationDrawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.nfc.Tag;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
@@ -40,6 +41,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -53,6 +55,9 @@ import java.lang.reflect.Constructor;
 
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
+import tv.danmaku.ijk.media.player.IjkMediaPlayer;
+
+import static android.icu.lang.UCharacter.GraphemeClusterBreak.T;
 
 
 /**
@@ -80,7 +85,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     private int mScreenWidth, mDestationHeight;
     public static float VIDEO_HEIGHT_PERCENT = 9 / 16.0f;//视频宽高比
     public static int VIDEO_SCREEN_PERCENT = 50;    //自动播放阈值
-    protected boolean mIfCurrentIsFullscreen = false;//当前是否全屏
+    protected boolean mIfCurrentIsFullscreen = true;//当前是否全屏
 
     private boolean canPlay = true;//是否
     private boolean mIsRealPause;//是否真正暂停
@@ -121,7 +126,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         }
     };
     private RelativeLayout mTextureViewGroup;
-    private IjkExoMediaPlayer mMediaPlayer;
+    private IjkMediaPlayer mMediaPlayer;
     private VideoPlayerManager mPlayerManager;
     private SeekBar mProgressBar;
     private TextView mTotalTimeTextView;
@@ -270,6 +275,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     }
 
     private void showPlayView() {
+        setCurrentPlayState(STATE_PLAYING);
         mLoadingBar.clearAnimation();
         mLoadingBar.setVisibility(View.GONE);
         mMiniPlayBtn.setVisibility(View.GONE);
@@ -308,13 +314,17 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     protected void setProgressAndTime(int progress, int secProgress, int currentTime, int totalTime) {
         if (!mTouchingProgressBar) {
-            if (progress != 0) mProgressBar.setProgress(progress);
+            if (progress != 0) {
+                mProgressBar.setProgress(progress);
+                mBottomProgressBar.setProgress(progress);
+            }
         }
         if (secProgress > 94) {
             secProgress = 100;
         }
         if (secProgress != 0) {
             mProgressBar.setSecondaryProgress(secProgress);
+            mBottomProgressBar.setProgress(progress);
         }
         mTotalTimeTextView.setText(VideoUtil.stringForTime(totalTime));
         if (currentTime > 0)
@@ -329,7 +339,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     @Override
     public void onSeekComplete() {
-
+        showPlayView();
     }
 
     //加载视频url
@@ -341,7 +351,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         showLoadingView();
         try {
             setCurrentPlayState(STATE_IDLE);
-            mPlayerManager.setMute(true);
+            mPlayerManager.setMute(false);
             mMediaPlayer.setDataSource(this.mUrl);
             mMediaPlayer.prepareAsync(); //开始异步加载
         } catch (Exception e) {
@@ -382,12 +392,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             mHandler.sendEmptyMessage(TIME_MSG);
             showPauseView(true);
         } else {
-            showPauseView(false);
+            showPauseView(true);
         }
 
-        if (playerState != STATE_PAUSING) {
-            return;
-        }
     }
 
     //视频停止
@@ -420,7 +427,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             mMediaPlayer.seekTo(0);
             mMediaPlayer.pause();
         }
-        this.showPauseView(false);
+        showPauseView(false);
     }
 
     //销毁播放器
@@ -497,13 +504,13 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         }
     }
 
-//    @Override
-//    public boolean onTouchEvent(MotionEvent event) {
-//        return true;
-//    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        return true;
+    }
 
     //    了,mp
-    protected boolean mTouchingProgressBar = true;
+    protected boolean mTouchingProgressBar = false;
 
     protected float mDownX;//触摸的X
 
@@ -511,19 +518,19 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     protected float mMoveY;
 
-    protected boolean mChangeVolume = true;//是否改变音量
+    protected boolean mChangeVolume = false;//是否改变音量
 
-    protected boolean mChangePosition = true;//是否改变播放进度
+    protected boolean mChangePosition = false;//是否改变播放进度
 
     protected boolean mShowVKey = true; //触摸显示虚拟按键
 
-    protected boolean mBrightness = true;//是否改变亮度
+    protected boolean mBrightness = false;//是否改变亮度
 
     protected boolean mFirstTouch = true;//是否首次触摸
 
     protected boolean mIsTouchWiget = true;//是否可以滑动界面改变进度，声音等
 
-    protected int mThreshold = 80; //手势偏差值
+    protected int mThreshold = 10; //手势偏差值
 
     protected int mSeekEndOffset; //手动滑动的起始偏移位置
 
@@ -602,7 +609,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                             }
                         }
                     }
-                    Log.e(TAG,"mDownPosition:"+mDownPosition+"deltaX+"+deltaX+"mScreenWidth:"+mScreenWidth);
 
                     if (mChangePosition) {
                         int totalTimeDuration = getDuration();
@@ -632,11 +638,12 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     break;
                 case MotionEvent.ACTION_UP:
                     mTouchingProgressBar = false;
-                    Log.e(TAG, "onTouch ACTION_UP:" + mChangePosition + "--" + mSeekTimePosition);
 //                    dismissProgressDialog();
 //                    dismissVolumeDialog();
 //                    dismissBrightnessDialog();
                     if (mChangePosition) {
+                        showLoadingView();
+//                        seekAndResume(mSeekTimePosition);
                         mMediaPlayer.seekTo(mSeekTimePosition);
                         int duration = getDuration();
                         int progress = mSeekTimePosition * 100 / (duration == 0 ? 1 : duration);
@@ -650,18 +657,49 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 //                    }
                     break;
             }
+        } else if (id == R.id.progress) {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                case MotionEvent.ACTION_MOVE:
+                    ViewParent vpdown = getParent();
+                    while (vpdown != null) {
+                        vpdown.requestDisallowInterceptTouchEvent(true);
+                        vpdown = vpdown.getParent();
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                    ViewParent vpup = getParent();
+                    while (vpup != null) {
+                        vpup.requestDisallowInterceptTouchEvent(false);
+                        vpup = vpup.getParent();
+                    }
+                    mBrightnessData = -1f;
+                    break;
+            }
         }
         return true;
     }
 
+    protected void loopSetProgressAndTime() {
+        mProgressBar.setProgress(0);
+        mProgressBar.setSecondaryProgress(0);
+        mBottomProgressBar.setProgress(0);
+        mBottomProgressBar.setSecondaryProgress(0);
+        mCurrentTimeTextView.setText(VideoUtil.stringForTime(0));
+    }
 
     @Override
     public void onClick(View v) {
         if (v == mMiniPlayBtn) {
             if (playerState == STATE_PAUSING) {
-                if (VideoUtil.getVisiblePercent(mViewGroup)
-                        > VIDEO_SCREEN_PERCENT) {
+                if (mIfCurrentIsFullscreen) {
+                    loopSetProgressAndTime();
                     resume();
+                } else {
+                    if (VideoUtil.getVisiblePercent(mViewGroup)
+                            > VIDEO_SCREEN_PERCENT) {
+                        resume();
+                    }
                 }
             } else {
                 load();
@@ -705,7 +743,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         int duration = 0;
         try {
             duration = mPlayerManager.getDuration();
-            Log.e(TAG, "Duration:" + duration);
         } catch (IllegalStateException e) {
             e.printStackTrace();
             return duration;
@@ -773,6 +810,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         if (listener != null) {
             listener.onAdVideoLoadComplete();
         }
+        playerOver();
         setIsComplete(true);
         setIsRealPause(true);
         playBack();
@@ -1084,6 +1122,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
 //            videoPlayerView.setDataUrl(mUrl);
             videoPlayerView.addTextureView();
+            setCurrentPlayState(STATE_PLAYING);
             mPlayerManager.setManagerListener(videoPlayerView);
             return videoPlayerView;
         } catch (Exception e) {
