@@ -79,6 +79,8 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
         return true;//返回true 自己处理异常
     }
 
+
+
     @Override
     public boolean onInfo(IMediaPlayer iMediaPlayer, int what, int extra) {
         if (extra == IMediaPlayer.MEDIA_INFO_VIDEO_ROTATION_CHANGED) {

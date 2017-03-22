@@ -19,9 +19,6 @@ import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
 import android.media.AudioManager;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
-import android.nfc.Tag;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
@@ -29,12 +26,9 @@ import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.ContextThemeWrapper;
-import android.telephony.TelephonyManager;
-import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -53,11 +47,9 @@ import android.widget.TextView;
 
 import java.lang.reflect.Constructor;
 
-import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
-import static android.icu.lang.UCharacter.GraphemeClusterBreak.T;
 
 
 /**
@@ -302,6 +294,11 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                 setTextAndProgress(percent);
                 mBuffterPoint = percent;
             }
+
+            //循环清除进度
+            if (percent == 0 && mProgressBar.getProgress() >= (mProgressBar.getMax() - 1)) {
+                loopSetProgressAndTime();
+            }
         }
     }
 
@@ -313,6 +310,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     }
 
     protected void setProgressAndTime(int progress, int secProgress, int currentTime, int totalTime) {
+        Log.e(TAG, "progress:" + progress + "secProgress" + secProgress + "currentTime" + currentTime + "totalTime" + totalTime);
         if (!mTouchingProgressBar) {
             if (progress != 0) {
                 mProgressBar.setProgress(progress);
@@ -324,7 +322,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         }
         if (secProgress != 0) {
             mProgressBar.setSecondaryProgress(secProgress);
-            mBottomProgressBar.setProgress(progress);
+            mBottomProgressBar.setSecondaryProgress(progress);
         }
         mTotalTimeTextView.setText(VideoUtil.stringForTime(totalTime));
         if (currentTime > 0)
@@ -339,7 +337,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     @Override
     public void onSeekComplete() {
-        showPlayView();
+        if (!isComplete() || !isRealPause()) {
+            showPlayView();
+        }
     }
 
     //加载视频url
@@ -384,15 +384,17 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         if (playerState != STATE_PAUSING) {
             return;
         }
-        Log.e(TAG, "do resume");
+        Log.e(TAG, "do resume:" + mMediaPlayer.isPlaying());
         if (!mMediaPlayer.isPlaying()) {
             entryResumeState();
-            mMediaPlayer.setOnSeekCompleteListener(null);
+//            mMediaPlayer.setOnSeekCompleteListener(null);
             mMediaPlayer.start();
             mHandler.sendEmptyMessage(TIME_MSG);
             showPauseView(true);
         } else {
+            entryResumeState();
             showPauseView(true);
+            mHandler.sendEmptyMessage(TIME_MSG);
         }
 
     }
@@ -423,7 +425,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         setCurrentPlayState(STATE_PAUSING);
         mHandler.removeCallbacksAndMessages(null);
         if (mMediaPlayer != null) {
-            mMediaPlayer.setOnSeekCompleteListener(null);
+//            mMediaPlayer.setOnSeekCompleteListener(null);
             mMediaPlayer.seekTo(0);
             mMediaPlayer.pause();
         }
@@ -872,8 +874,12 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     Log.e(TAG, "playerState:STATE_PAUSING" + "--" + STATE_PLAYING);
                     if (playerState == STATE_PAUSING) {
                         if (isIfCurrentIsFullscreen()) {
-                            setCurrentPlayState(STATE_PAUSING);
-                            resume();
+                            if (isRealPause() || isComplete()) {
+                                pause();
+                            } else {
+                                setCurrentPlayState(STATE_PAUSING);
+                                resume();
+                            }
                         } else {
                             if (mIsRealPause) {
                                 //手动点的暂停，回来后还暂停
