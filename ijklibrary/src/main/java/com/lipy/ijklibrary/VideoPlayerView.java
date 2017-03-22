@@ -1,12 +1,6 @@
 package com.lipy.ijklibrary;
 
 
-import com.lipy.ijklibrary.listener.FrameImageLoadListener;
-import com.lipy.ijklibrary.listener.ImageLoaderListener;
-import com.lipy.ijklibrary.listener.VideoPlayerListener;
-import com.lipy.ijklibrary.utils.OrientationUtils;
-import com.lipy.ijklibrary.utils.VideoUtil;
-
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.BroadcastReceiver;
@@ -18,6 +12,7 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
+import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
@@ -25,10 +20,10 @@ import android.os.Message;
 import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.view.ContextThemeWrapper;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -39,17 +34,26 @@ import android.view.ViewParent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import com.lipy.ijklibrary.listener.FrameImageLoadListener;
+import com.lipy.ijklibrary.listener.ImageLoaderListener;
+import com.lipy.ijklibrary.listener.VideoPlayerListener;
+import com.lipy.ijklibrary.utils.OrientationUtils;
+import com.lipy.ijklibrary.utils.VideoUtil;
+
 import java.lang.reflect.Constructor;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
+import static android.icu.lang.UCharacter.GraphemeClusterBreak.T;
+import static android.support.v7.widget.AppCompatDrawableManager.get;
 
 
 /**
@@ -125,6 +129,8 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     private TextView mCurrentTimeTextView;
 
     protected int mBuffterPoint;//缓存进度
+    private ProgressBar mDialogVolumeProgressBar;
+    private ImageView mBackButton;
 
     public VideoPlayerView(Context context) {
         super(context);
@@ -142,9 +148,24 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     }
 
+    private int viewWidth = -1;
+    private int viewHeight = -1;
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if (changed && viewWidth == -1 && viewHeight == -1) {
+            viewWidth = getWidth();
+            viewHeight = getHeight();
+            Log.e(TAG, "onLayoutgetWidth:" + getWidth() + "getHeight()" + getHeight());
+        }
+    }
+
+
     //设置父布局
     public void setViewGroup(ViewGroup viewGroup) {
         mViewGroup = viewGroup;
+        Log.e(TAG, "mViewGroup" + mViewGroup);
     }
 
     private void initConfig() {
@@ -171,8 +192,8 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         mProgressBar.setOnClickListener(this);
         mTotalTimeTextView = (TextView) findViewById(R.id.total);
         mCurrentTimeTextView = (TextView) findViewById(R.id.current);
-
-
+        mBackButton = (ImageView) findViewById(R.id.back);
+        mBackButton.setOnClickListener(this);
         mTextureViewGroup.addView(mVideoView);
         mVideoView.setOnClickListener(this);
         mVideoView.setKeepScreenOn(true);
@@ -196,11 +217,17 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     public void setDataUrl(String url) {
         this.mUrl = url;
+        if (mIfCurrentIsFullscreen) {
+            mBackButton.setVisibility(View.VISIBLE);
+        } else {
+            mBackButton.setVisibility(View.GONE);
+        }
     }
 
     public void isShowFullBtn(boolean isShow) {
         mFullBtn.setImageResource(isShow ? R.drawable.xadsdk_ad_mini : R.drawable.xadsdk_ad_mini_null);
         mFullBtn.setVisibility(isShow ? View.VISIBLE : View.GONE);
+        mBackButton.setVisibility(!isShow ? View.VISIBLE : View.GONE);
     }
 
     public boolean isRealPause() {
@@ -310,19 +337,19 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     }
 
     protected void setProgressAndTime(int progress, int secProgress, int currentTime, int totalTime) {
-        Log.e(TAG, "progress:" + progress + "secProgress" + secProgress + "currentTime" + currentTime + "totalTime" + totalTime);
+//        Log.e(TAG, "progress:" + progress + "secProgress" + secProgress + "currentTime" + currentTime + "totalTime" + totalTime);
         if (!mTouchingProgressBar) {
             if (progress != 0) {
                 mProgressBar.setProgress(progress);
                 mBottomProgressBar.setProgress(progress);
             }
         }
-        if (secProgress > 94) {
-            secProgress = 100;
-        }
+//        if (secProgress > 94) {
+//            secProgress = 100;
+//        }
         if (secProgress != 0) {
             mProgressBar.setSecondaryProgress(secProgress);
-            mBottomProgressBar.setSecondaryProgress(progress);
+            mBottomProgressBar.setSecondaryProgress(secProgress);
         }
         mTotalTimeTextView.setText(VideoUtil.stringForTime(totalTime));
         if (currentTime > 0)
@@ -332,7 +359,11 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     @Override
     public void onVideoSizeChanged() {
-
+        int mVideoWidth = mPlayerManager.getCurrentVideoWidth();
+        int mVideoHeight = mPlayerManager.getCurrentVideoHeight();
+        if (mVideoWidth != 0 && mVideoHeight != 0) {
+            mVideoView.requestLayout();
+        }
     }
 
     @Override
@@ -532,7 +563,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     protected boolean mIsTouchWiget = true;//是否可以滑动界面改变进度，声音等
 
-    protected int mThreshold = 10; //手势偏差值
+    protected int mThreshold = 50; //手势偏差值
 
     protected int mSeekEndOffset; //手动滑动的起始偏移位置
 
@@ -619,7 +650,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                             mSeekTimePosition = totalTimeDuration;
                         String seekTime = VideoUtil.stringForTime(mSeekTimePosition);
                         String totalTime = VideoUtil.stringForTime(totalTimeDuration);
-//                        showProgressDialog(deltaX, seekTime, mSeekTimePosition, totalTime, totalTimeDuration);
+                        showProgressDialog(deltaX, seekTime, mSeekTimePosition, totalTime, totalTimeDuration);
                     } else if (mChangeVolume) {
                         deltaY = -deltaY;
                         int max = mPlayerManager.getAudioManager().getStreamMaxVolume(AudioManager.STREAM_MUSIC);
@@ -627,7 +658,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                         mPlayerManager.getAudioManager().setStreamVolume(AudioManager.STREAM_MUSIC, mGestureDownVolume + deltaV, 0);
                         int volumePercent = (int) (mGestureDownVolume * 100 / max + deltaY * 3 * 100 / mScreenHeight);
 
-//                        showVolumeDialog(-deltaY, volumePercent);
+                        showVolumeDialog(-deltaY, volumePercent);
                     } else if (!mChangePosition && mBrightness) {
                         if (Math.abs(deltaY) > mThreshold) {
                             float percent = (-deltaY / mScreenHeight);
@@ -640,9 +671,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     break;
                 case MotionEvent.ACTION_UP:
                     mTouchingProgressBar = false;
-//                    dismissProgressDialog();
-//                    dismissVolumeDialog();
-//                    dismissBrightnessDialog();
+                    dismissProgressDialog();
+                    dismissVolumeDialog();
+                    dismissBrightnessDialog();
                     if (mChangePosition) {
                         showLoadingView();
 //                        seekAndResume(mSeekTimePosition);
@@ -682,7 +713,134 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         return true;
     }
 
-    protected void loopSetProgressAndTime() {
+    private Dialog mVolumeDialog;
+
+    protected void showVolumeDialog(float deltaY, int volumePercent) {
+        if (mVolumeDialog == null) {
+            View localView = LayoutInflater.from(getContext()).inflate(R.layout.video_volume_dialog, null);
+            mDialogVolumeProgressBar = ((ProgressBar) localView.findViewById(R.id.volume_progressbar));
+            mVolumeDialog = new Dialog(getContext(), R.style.video_style_dialog_progress);
+            mVolumeDialog.setContentView(localView);
+            mVolumeDialog.getWindow().addFlags(8);
+            mVolumeDialog.getWindow().addFlags(32);
+            mVolumeDialog.getWindow().addFlags(16);
+            mVolumeDialog.getWindow().setLayout(-2, -2);
+            WindowManager.LayoutParams localLayoutParams = mVolumeDialog.getWindow().getAttributes();
+            localLayoutParams.gravity = Gravity.TOP | Gravity.LEFT;
+            localLayoutParams.width = getWidth();
+            localLayoutParams.height = getHeight();
+            int location[] = new int[2];
+            getLocationOnScreen(location);
+            localLayoutParams.x = location[0];
+            localLayoutParams.y = location[1];
+            mVolumeDialog.getWindow().setAttributes(localLayoutParams);
+        }
+        if (!mVolumeDialog.isShowing()) {
+            mVolumeDialog.show();
+        }
+
+        mDialogVolumeProgressBar.setProgress(volumePercent);
+    }
+
+    protected Dialog mProgressDialog;
+    protected ProgressBar mDialogProgressBar;
+    protected TextView mDialogSeekTime;
+    protected TextView mDialogTotalTime;
+    protected ImageView mDialogIcon;
+
+    protected void showProgressDialog(float deltaX, String seekTime, int seekTimePosition, String totalTime, int totalTimeDuration) {
+        if (mProgressDialog == null) {
+            View localView = LayoutInflater.from(getContext()).inflate(R.layout.video_progress_dialog, null);
+            mDialogProgressBar = ((ProgressBar) localView.findViewById(R.id.duration_progressbar));
+            mDialogSeekTime = ((TextView) localView.findViewById(R.id.tv_current));
+            mDialogTotalTime = ((TextView) localView.findViewById(R.id.tv_duration));
+            mDialogIcon = ((ImageView) localView.findViewById(R.id.duration_image_tip));
+            mProgressDialog = new Dialog(getContext(), R.style.video_style_dialog_progress);
+            mProgressDialog.setContentView(localView);
+            mProgressDialog.getWindow().addFlags(Window.FEATURE_ACTION_BAR);
+            mProgressDialog.getWindow().addFlags(32);
+            mProgressDialog.getWindow().addFlags(16);
+            mProgressDialog.getWindow().setLayout(getWidth(), getHeight());
+            WindowManager.LayoutParams localLayoutParams = mProgressDialog.getWindow().getAttributes();
+            localLayoutParams.gravity = Gravity.TOP;
+            localLayoutParams.width = getWidth();
+            localLayoutParams.height = getHeight();
+            int location[] = new int[2];
+            getLocationOnScreen(location);
+            localLayoutParams.x = location[0];
+            localLayoutParams.y = location[1];
+            mProgressDialog.getWindow().setAttributes(localLayoutParams);
+        }
+        if (!mProgressDialog.isShowing()) {
+            mProgressDialog.show();
+        }
+
+        mDialogSeekTime.setText(seekTime);
+        mDialogTotalTime.setText(" / " + totalTime);
+        if (totalTimeDuration > 0)
+            mDialogProgressBar.setProgress(seekTimePosition * 100 / totalTimeDuration);
+        if (deltaX > 0) {
+            mDialogIcon.setBackgroundResource(R.drawable.video_forward_icon);
+        } else {
+            mDialogIcon.setBackgroundResource(R.drawable.video_backward_icon);
+        }
+
+    }
+
+    protected void dismissProgressDialog() {
+        if (mProgressDialog != null) {
+            mProgressDialog.dismiss();
+            mProgressDialog = null;
+        }
+    }
+
+
+    private void dismissVolumeDialog() {
+        if (mVolumeDialog != null) {
+            mVolumeDialog.dismiss();
+            mVolumeDialog = null;
+        }
+    }
+
+    protected Dialog mBrightnessDialog;
+
+    protected TextView mBrightnessDialogTv;
+
+    protected void showBrightnessDialog(float percent) {
+        if (mBrightnessDialog == null) {
+            View localView = LayoutInflater.from(getContext()).inflate(R.layout.video_brightness, null);
+            mBrightnessDialogTv = (TextView) localView.findViewById(R.id.app_video_brightness);
+            mBrightnessDialog = new Dialog(getContext(), R.style.video_style_dialog_progress);
+            mBrightnessDialog.setContentView(localView);
+            mBrightnessDialog.getWindow().addFlags(8);
+            mBrightnessDialog.getWindow().addFlags(32);
+            mBrightnessDialog.getWindow().addFlags(16);
+            mBrightnessDialog.getWindow().setLayout(-2, -2);
+            WindowManager.LayoutParams localLayoutParams = mBrightnessDialog.getWindow().getAttributes();
+            localLayoutParams.gravity = Gravity.TOP | Gravity.RIGHT;
+            localLayoutParams.width = getWidth();
+            localLayoutParams.height = getHeight();
+            int location[] = new int[2];
+            getLocationOnScreen(location);
+            localLayoutParams.x = location[0];
+            localLayoutParams.y = location[1];
+            mBrightnessDialog.getWindow().setAttributes(localLayoutParams);
+        }
+        if (!mBrightnessDialog.isShowing()) {
+            mBrightnessDialog.show();
+        }
+        if (mBrightnessDialogTv != null)
+            mBrightnessDialogTv.setText((int) (percent * 100) + "%");
+    }
+
+    protected void dismissBrightnessDialog() {
+        if (mBrightnessDialog != null) {
+            mBrightnessDialog.dismiss();
+            mBrightnessDialog = null;
+        }
+    }
+
+    private void loopSetProgressAndTime() {
         mProgressBar.setProgress(0);
         mProgressBar.setSecondaryProgress(0);
         mBottomProgressBar.setProgress(0);
@@ -692,6 +850,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     @Override
     public void onClick(View v) {
+        if (mIfCurrentIsFullscreen) {
+            hideNavKey(getContext());
+        }
         if (v == mMiniPlayBtn) {
             if (playerState == STATE_PAUSING) {
                 if (mIfCurrentIsFullscreen) {
@@ -716,9 +877,82 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             if (listener != null) {
                 listener.onClickFullScreenBtn();
             }
+        } else if (v == mBackButton) {
+            clearFullscreenLayout();
         }
 
 
+    }
+
+    /**
+     * 退出window层播放全屏效果
+     */
+    public void clearFullscreenLayout() {
+        mIfCurrentIsFullscreen = false;
+        int delay = 0;
+        if (mOrientationUtils != null) {
+            delay = mOrientationUtils.backToProtVideo();
+            mOrientationUtils.setEnable(false);
+            if (mOrientationUtils != null) {
+                mOrientationUtils.releaseListener();
+                mOrientationUtils = null;
+            }
+        }
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                backToNormal();
+            }
+        }, delay);
+
+    }
+
+
+    /**
+     * 回到正常效果
+     */
+    private void backToNormal() {
+        ViewGroup vp = getViewGroup();
+        View oldF = vp.findViewById(FULLSCREEN_ID);
+        ViewGroup viewGroup = (ViewGroup) vp.findViewById(FULLSCREEN_ID2);
+        viewGroup.removeAllViews();
+        VideoPlayerView videoPlayerView;
+        if (oldF != null) {
+            videoPlayerView = (VideoPlayerView) oldF;
+            resolveNormalVideoShow(oldF, vp, videoPlayerView);
+        } else {
+            resolveNormalVideoShow(null, vp, null);
+        }
+    }
+
+    /**
+     * 恢复
+     */
+    protected void resolveNormalVideoShow(View oldF, ViewGroup vp, VideoPlayerView videoPlayerView) {
+        mViewGroup.removeAllViews();
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, mDestationHeight);
+        if (oldF != null && oldF.getParent() != null) {
+            ViewGroup viewGroup = (ViewGroup) oldF.getParent();
+            vp.removeView(viewGroup);
+        }
+        if (mMediaPlayer.isPlaying() && playerState == STATE_PLAYING) {
+            showPauseView(false);
+        } else {
+            showPauseView(true);
+        }
+        mViewGroup.setLayoutParams(lp);
+        addTextureView();
+        videoPlayerView.setViewGroup(mViewGroup);
+        mViewGroup.addView(videoPlayerView, lp);
+        mIfCurrentIsFullscreen = false;
+        showNavKey(getContext(), mSystemUiVisibility);
+        VideoUtil.showSupportActionBar(getContext(), mActionBar, mStatusBar);
+        //TODO 显示全屏按键
+        isShowFullBtn(true);
+    }
+
+    public static void showNavKey(Context context, int systemUiVisibility) {
+        ((Activity) context).getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
     }
 
 
@@ -769,7 +1003,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         } else if (lpa.screenBrightness < 0.01f) {
             lpa.screenBrightness = 0.01f;
         }
-//        showBrightnessDialog(lpa.screenBrightness);
+        showBrightnessDialog(lpa.screenBrightness);
         ((Activity) (getContext())).getWindow().setAttributes(lpa);
     }
 
@@ -874,6 +1108,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     Log.e(TAG, "playerState:STATE_PAUSING" + "--" + STATE_PLAYING);
                     if (playerState == STATE_PAUSING) {
                         if (isIfCurrentIsFullscreen()) {
+                            hideNavKey(context);
                             if (isRealPause() || isComplete()) {
                                 pause();
                             } else {
@@ -1053,7 +1288,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
      * 移除没用的
      */
     private void removeVideo(ViewGroup vp, int id) {
-        Log.e(TAG, "removeView:" + vp.getChildCount() + "---" + id);
         View old = vp.findViewById(id);
         if (old != null) {
             if (old.getParent() != null) {
@@ -1064,6 +1298,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     }
 
     private static final int FULLSCREEN_ID = 0x0123;
+    private static final int FULLSCREEN_ID2 = 0x01234;
+
+    private int mSystemUiVisibility;
 
     /**
      * 利用window层播放全屏效果
@@ -1072,7 +1309,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
      * @param statusBar 是否有状态bar，有的话需要隐藏
      */
     public VideoPlayerView startWindowFullscreen(final Context context, final boolean actionBar, final boolean statusBar) {
-
+        mSystemUiVisibility = ((Activity) context).getWindow().getDecorView().getSystemUiVisibility();
         hideSupportActionBar(context, actionBar, statusBar);
 
         hideNavKey(context);//隐藏虚拟按键
@@ -1117,6 +1354,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             videoPlayerView.setIfCurrentIsFullscreen(true);
             RelativeLayout.LayoutParams lpParent = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             RelativeLayout relativeLayout = new RelativeLayout(context);
+            relativeLayout.setId(FULLSCREEN_ID2);
             relativeLayout.setBackgroundColor(Color.BLACK);
             RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(getWidth(), getHeight());
             videoPlayerView.setViewGroup(relativeLayout);
@@ -1126,7 +1364,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             relativeLayout.setVisibility(INVISIBLE);
             resolveFullVideoShow(context, videoPlayerView, relativeLayout);
 
-//            videoPlayerView.setDataUrl(mUrl);
+            videoPlayerView.setDataUrl(mUrl);
             videoPlayerView.addTextureView();
             setCurrentPlayState(STATE_PLAYING);
             mPlayerManager.setManagerListener(videoPlayerView);
@@ -1149,6 +1387,8 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         mVideoView.setSurfaceTextureListener(this);
         mVideoView.setRotation(mPlayerManager.getRotate());
 
+        Log.e(TAG, "mPlayerManager.getRotate()" + mPlayerManager.getRotate());
+        Log.e(TAG, "mVideoView" + mVideoView.getSizeW() + mVideoView.getSizeH());
         RelativeLayout.LayoutParams layoutParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         layoutParams.addRule(RelativeLayout.CENTER_IN_PARENT);
         mTextureViewGroup.addView(mVideoView, layoutParams);
@@ -1157,7 +1397,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     public static void hideSupportActionBar(Context context, boolean actionBar, boolean statusBar) {
         if (actionBar) {
-            AppCompatActivity appCompatActivity = getAppCompActivity(context);
+            AppCompatActivity appCompatActivity = VideoUtil.getAppCompActivity(context);
             if (appCompatActivity != null) {
                 ActionBar ab = appCompatActivity.getSupportActionBar();
                 if (ab != null) {
@@ -1172,25 +1412,10 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                 fragmentActivity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                         WindowManager.LayoutParams.FLAG_FULLSCREEN);
             } else {
-                getAppCompActivity(context).getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                VideoUtil.getAppCompActivity(context).getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                         WindowManager.LayoutParams.FLAG_FULLSCREEN);
             }
         }
-    }
-
-    /**
-     * Get AppCompatActivity from context
-     *
-     * @return AppCompatActivity if it's not null
-     */
-    public static AppCompatActivity getAppCompActivity(Context context) {
-        if (context == null) return null;
-        if (context instanceof AppCompatActivity) {
-            return (AppCompatActivity) context;
-        } else if (context instanceof ContextThemeWrapper) {
-            return getAppCompActivity(((ContextThemeWrapper) context).getBaseContext());
-        }
-        return null;
     }
 
 

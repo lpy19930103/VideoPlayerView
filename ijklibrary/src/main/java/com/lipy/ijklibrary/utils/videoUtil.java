@@ -6,6 +6,10 @@ import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.support.v4.app.FragmentActivity;
+import android.support.v7.app.ActionBar;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.view.ContextThemeWrapper;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -189,6 +193,43 @@ public class VideoUtil {
     public static int px2dip(Context context, float pxValue) {
         final float scale = context.getResources().getDisplayMetrics().density;
         return (int) (pxValue / scale + 0.5f);
+    }
+    public static void showSupportActionBar(Context context, boolean actionBar, boolean statusBar) {
+        if (actionBar) {
+            AppCompatActivity appCompatActivity = getAppCompActivity(context);
+            if (appCompatActivity != null) {
+                ActionBar ab = appCompatActivity.getSupportActionBar();
+                if (ab != null) {
+                    ab.setShowHideAnimationEnabled(false);
+                    ab.show();
+                }
+            }
+        }
+
+        if (statusBar) {
+            if (context instanceof FragmentActivity) {
+                FragmentActivity fragmentActivity = (FragmentActivity) context;
+                fragmentActivity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            } else {
+                getAppCompActivity(context).getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            }
+        }
+    }
+
+
+    /**
+     * Get AppCompatActivity from context
+     *
+     * @return AppCompatActivity if it's not null
+     */
+    public static AppCompatActivity getAppCompActivity(Context context) {
+        if (context == null) return null;
+        if (context instanceof AppCompatActivity) {
+            return (AppCompatActivity) context;
+        } else if (context instanceof ContextThemeWrapper) {
+            return getAppCompActivity(((ContextThemeWrapper) context).getBaseContext());
+        }
+        return null;
     }
 
     /**
