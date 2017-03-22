@@ -181,11 +181,11 @@ public class VideoPlayerManager implements IMediaPlayer.OnPreparedListener, IMed
             if (mediaPlayer != null && holder.isValid()) {
                 mediaPlayer.setSurface(holder);
             }
-            Log.e(TAG, "showDisplay: mediaPlayer+" + mediaPlayer);
             if (mediaPlayer instanceof IjkMediaPlayer) {
                 if (mediaPlayer != null && mediaPlayer.getDuration() > 30
                         && mediaPlayer.getCurrentPosition() < mediaPlayer.getDuration()) {
-                    mediaPlayer.seekTo(mediaPlayer.getCurrentPosition() - 20);
+//                    Log.e(TAG, "showDisplay: mediaPlayer+" + mediaPlayer);
+//                    mediaPlayer.seekTo(mediaPlayer.getCurrentPosition() - 20);
                 }
             }
         }
