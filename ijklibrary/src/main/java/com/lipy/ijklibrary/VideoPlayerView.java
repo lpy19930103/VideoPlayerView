@@ -84,6 +84,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     public static float VIDEO_HEIGHT_PERCENT = 9 / 16.0f;//视频宽高比
     public static int VIDEO_SCREEN_PERCENT = 50;    //自动播放阈值
     protected boolean mIfCurrentIsFullscreen = false;//当前是否全屏
+    protected boolean mIfCurrentIsSmallscreen = false;//当前是否全屏
 
     private boolean canPlay = true;//是否
     private boolean mIsRealPause;//是否真正暂停
@@ -104,6 +105,40 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     private VideoPlayerListener listener;
     private FrameImageLoadListener mFrameLoadListener;
     private ScreenEventReceiver mScreenReceiver;
+
+    private boolean mTouchingProgressBar = false;
+
+    private float mDownX;//触摸的X
+
+    private float mDownY; //触摸的Y
+
+    private float mMoveY;
+
+    private boolean mChangeVolume = false;//是否改变音量
+
+    private boolean mChangePosition = false;//是否改变播放进度
+
+    private boolean mShowVKey = true; //触摸显示虚拟按键
+
+    private boolean mBrightness = false;//是否改变亮度
+
+    private boolean mFirstTouch = true;//是否首次触摸
+
+    private boolean mIsTouchWiget = mIfCurrentIsFullscreen;//是否可以滑动界面改变进度，声音等
+
+    private int mThreshold = 50; //手势偏差值
+
+    private int mSeekEndOffset; //手动滑动的起始偏移位置
+
+    private int mDownPosition; //手指放下的位置
+
+    private int mGestureDownVolume; //手势调节音量的大小
+
+    private int mSeekTimePosition; //手动改变滑动的位置
+
+    private int mScreenHeight; //屏幕高度
+
+    private float mBrightnessData = -1; //亮度
 
     private Handler mHandler = new Handler() {
         @Override
@@ -146,6 +181,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     public VideoPlayerView(Context context, Boolean fullFlag) {
         super(context);
         mIfCurrentIsFullscreen = fullFlag;
+        mIsTouchWiget = fullFlag;
         initConfig();
         initView();
         registerBroadcastReceiver();
@@ -156,7 +192,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     //设置父布局
     public void setViewGroup(ViewGroup viewGroup) {
         mViewGroup = viewGroup;
-        Log.e(TAG, "mViewGroup" + mViewGroup);
     }
 
     private void initConfig() {
@@ -209,6 +244,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         showPauseView(false);
     }
 
+    /**
+     * 设置播放连接
+     */
     public void setDataUrl(String url) {
         this.mUrl = url;
         if (mIfCurrentIsFullscreen) {
@@ -218,18 +256,26 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         }
     }
 
+    /**
+     * 是否显示虚拟按键
+     */
+    private byte[] mByte = new byte[]{};
+
     private void showDummyView(boolean isShow) {
         Log.e(TAG, "isShow:" + isShow);
         dummyRl.setVisibility(isShow ? VISIBLE : INVISIBLE);
         isShowDummyView = isShow;
-        if (isShow) {
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    showDummyView(false);
-                }
-            }, 5000);
+        if (isShow && playerState == STATE_PLAYING) {
+            synchronized (mByte) {
+                new Handler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        showDummyView(false);
+                    }
+                }, 5000);
+            }
         }
+
     }
 
     public void isShowFullBtn(boolean isShow) {
@@ -364,6 +410,9 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             mCurrentTimeTextView.setText(VideoUtil.stringForTime(currentTime));
     }
 
+    public void setFrameURI(String url) {
+        mFrameURI = url;
+    }
 
     @Override
     public void onVideoSizeChanged() {
@@ -533,14 +582,22 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     @Override
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
-        Log.e(TAG, "onVisibilityChanged");
+        Log.e(TAG, "onVisibilityChanged:" + visibility + "STATE_PAUSING:" + STATE_PAUSING);
         if (visibility == VISIBLE && playerState == STATE_PAUSING) {
+            Log.e(TAG, "onVisibilityChanged" + visibility);
             if (isRealPause() || isComplete()) {
                 pause();
             } else {
-                decideCanPlay();
+                if (mIfCurrentIsSmallscreen) {
+                    setCurrentPlayState(STATE_PAUSING);
+                    resume();
+                    mIfCurrentIsSmallscreen = false;
+                } else {
+                    decideCanPlay();
+                }
             }
         } else {
+            Log.e(TAG, "onVisibilityChanged" + visibility);
             pause();
         }
     }
@@ -549,41 +606,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     public boolean onTouchEvent(MotionEvent event) {
         return true;
     }
-
-    //    了,mp
-    protected boolean mTouchingProgressBar = false;
-
-    protected float mDownX;//触摸的X
-
-    protected float mDownY; //触摸的Y
-
-    protected float mMoveY;
-
-    protected boolean mChangeVolume = false;//是否改变音量
-
-    protected boolean mChangePosition = false;//是否改变播放进度
-
-    protected boolean mShowVKey = true; //触摸显示虚拟按键
-
-    protected boolean mBrightness = false;//是否改变亮度
-
-    protected boolean mFirstTouch = true;//是否首次触摸
-
-    protected boolean mIsTouchWiget = true;//是否可以滑动界面改变进度，声音等
-
-    protected int mThreshold = 50; //手势偏差值
-
-    protected int mSeekEndOffset; //手动滑动的起始偏移位置
-
-    protected int mDownPosition; //手指放下的位置
-
-    protected int mGestureDownVolume; //手势调节音量的大小
-
-    protected int mSeekTimePosition; //手动改变滑动的位置
-
-    protected int mScreenHeight; //屏幕高度
-
-    protected float mBrightnessData = -1; //亮度
 
     public boolean isTouchWiget() {
         return mIsTouchWiget;
@@ -899,6 +921,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
      */
     public void clearFullscreenLayout() {
         mIfCurrentIsFullscreen = false;
+        mIsTouchWiget = false;
         int delay = 0;
         if (mOrientationUtils != null) {
             delay = mOrientationUtils.backToProtVideo();
@@ -939,6 +962,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
      * 恢复
      */
     protected void resolveNormalVideoShow(View oldF, ViewGroup vp, VideoPlayerView videoPlayerView) {
+        mIfCurrentIsSmallscreen = true;
         mViewGroup.removeAllViews();
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, mDestationHeight);
         if (oldF != null && oldF.getParent() != null) {
@@ -950,11 +974,13 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         } else {
             showPauseView(true);
         }
+        setCurrentPlayState(STATE_PAUSING);
         mViewGroup.setLayoutParams(lp);
         addTextureView();
         videoPlayerView.setViewGroup(mViewGroup);
         mViewGroup.addView(videoPlayerView, lp);
         mIfCurrentIsFullscreen = false;
+        mIsTouchWiget = false;
         showNavKey(getContext(), mSystemUiVisibility);
         VideoUtil.showSupportActionBar(getContext(), mActionBar, mStatusBar);
         //TODO 显示全屏按键
@@ -1116,7 +1142,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             //主动锁屏时 pause, 主动解锁屏幕时，resume
             switch (intent.getAction()) {
                 case Intent.ACTION_USER_PRESENT:
-                    Log.e(TAG, "playerState:STATE_PAUSING" + "--" + STATE_PLAYING);
                     if (playerState == STATE_PAUSING) {
                         if (isIfCurrentIsFullscreen()) {
                             hideNavKey(context);
@@ -1127,7 +1152,8 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                                 resume();
                             }
                         } else {
-                            if (mIsRealPause) {
+                            showNavKey(getContext(), mSystemUiVisibility);
+                            if (isRealPause() || isComplete()) {
                                 //手动点的暂停，回来后还暂停
                                 pause();
                             } else {
@@ -1138,7 +1164,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
                     break;
                 case Intent.ACTION_SCREEN_OFF:
-                    Log.e(TAG, "playerState:STATE_PLAYING" + "--" + STATE_PLAYING);
                     if (playerState == STATE_PLAYING) {
                         pause();
                     }
@@ -1215,6 +1240,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         videoPlayer.setVisibility(VISIBLE);
         frameLayout.setVisibility(VISIBLE);
         mIfCurrentIsFullscreen = true;
+        mIsTouchWiget = false;
     }
 
 
