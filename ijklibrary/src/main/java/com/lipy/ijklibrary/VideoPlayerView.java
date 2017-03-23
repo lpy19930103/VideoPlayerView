@@ -12,9 +12,7 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
-import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
-import android.nfc.Tag;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
@@ -52,11 +50,6 @@ import java.lang.reflect.Constructor;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
-
-import static android.icu.lang.UCharacter.GraphemeClusterBreak.T;
-import static android.support.v7.widget.AppCompatDrawableManager.get;
-import static com.lipy.ijklibrary.R.id.mraid_content_layout;
-
 
 /**
  * 视频播放view
@@ -99,7 +92,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     private Button mMiniPlayBtn;
     private ImageView mFullBtn;
     private ImageView mLoadingBar;
-    private ImageView mFrameView;
     private Surface videoSurface;
     protected OrientationUtils mOrientationUtils; //旋转工具类
     private VideoPlayerListener listener;
@@ -238,7 +230,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         mMiniPlayBtn = (Button) view.findViewById(R.id.xadsdk_small_play_btn);
         mFullBtn = (ImageView) view.findViewById(R.id.xadsdk_to_full_view);
         mLoadingBar = (ImageView) view.findViewById(R.id.loading_bar);
-        mFrameView = (ImageView) view.findViewById(R.id.framing_view);
         mMiniPlayBtn.setOnClickListener(this);
         mFullBtn.setOnClickListener(this);
         showPauseView(false);
@@ -262,17 +253,22 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     private byte[] mByte = new byte[]{};
 
     private void showDummyView(boolean isShow) {
-        Log.e(TAG, "isShow:" + isShow);
+        if (playerState != STATE_PLAYING) {
+            return;
+        }
         dummyRl.setVisibility(isShow ? VISIBLE : INVISIBLE);
         isShowDummyView = isShow;
-        if (isShow && playerState == STATE_PLAYING) {
+        if (isShow) {
             synchronized (mByte) {
                 new Handler().postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         showDummyView(false);
+                        if (mIfCurrentIsFullscreen) {
+                            hideNavKey(getContext());
+                        }
                     }
-                }, 5000);
+                }, 3000);
             }
         }
 
@@ -326,15 +322,14 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     private void showPauseView(boolean show) {
         mFullBtn.setVisibility(show ? View.VISIBLE : View.GONE);
-        mMiniPlayBtn.setVisibility(show ? View.GONE : View.VISIBLE);
         mLoadingBar.clearAnimation();
         mLoadingBar.setVisibility(View.GONE);
-        if (!show) {
-            mFrameView.setVisibility(View.VISIBLE);
-            loadFrameImage();
-        } else {
-            mFrameView.setVisibility(View.GONE);
-        }
+    }
+
+    private void showStopView(boolean isShow) {
+        mMiniPlayBtn.setVisibility(VISIBLE);
+        mMiniPlayBtn.setBackground(isShow ? getResources().getDrawable(R.drawable.video_pause_normal) :
+                getResources().getDrawable(R.drawable.video_play_normal));
     }
 
     private void showLoadingView() {
@@ -343,7 +338,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         AnimationDrawable anim = (AnimationDrawable) mLoadingBar.getBackground();
         anim.start();
         mMiniPlayBtn.setVisibility(View.GONE);
-        mFrameView.setVisibility(View.GONE);
         loadFrameImage();
     }
 
@@ -351,8 +345,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         setCurrentPlayState(STATE_PLAYING);
         mLoadingBar.clearAnimation();
         mLoadingBar.setVisibility(View.GONE);
-        mMiniPlayBtn.setVisibility(View.GONE);
-        mFrameView.setVisibility(View.GONE);
     }
 
     //播放结束
@@ -688,7 +680,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                         mPlayerManager.getAudioManager().setStreamVolume(AudioManager.STREAM_MUSIC, mGestureDownVolume + deltaV, 0);
                         int volumePercent = (int) (mGestureDownVolume * 100 / max + deltaY * 3 * 100 / mScreenHeight);
 
-                        showVolumeDialog(-deltaY, volumePercent);
+                        showVolumeDialog(volumePercent);
                     } else if (!mChangePosition && mBrightness) {
                         if (Math.abs(deltaY) > mThreshold) {
                             float percent = (-deltaY / mScreenHeight);
@@ -746,7 +738,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     private Dialog mVolumeDialog;
 
-    protected void showVolumeDialog(float deltaY, int volumePercent) {
+    protected void showVolumeDialog(int volumePercent) {
         if (mVolumeDialog == null) {
             View localView = LayoutInflater.from(getContext()).inflate(R.layout.video_volume_dialog, null);
             mDialogVolumeProgressBar = ((ProgressBar) localView.findViewById(R.id.volume_progressbar));
@@ -886,6 +878,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         }
         if (v == mMiniPlayBtn) {
             if (playerState == STATE_PAUSING) {
+                showStopView(true);
                 if (mIfCurrentIsFullscreen) {
                     loopSetProgressAndTime();
                     resume();
@@ -895,7 +888,11 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                         resume();
                     }
                 }
+            } else if (playerState == STATE_PLAYING) {
+                showStopView(false);
+                pause();
             } else {
+                showStopView(false);
                 load();
             }
         } else if (v == mVideoView) {
@@ -1051,6 +1048,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         if (mPlayerManager.isPlaying()) {
             showPlayView();
             showDummyView(false);
+            showStopView(true);
         }
         Log.e(TAG, "onSurfaceTextureAvailable");
         videoSurface = new Surface(surface);
@@ -1095,13 +1093,16 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     public void onError(int i, int i1) {
         Log.e(TAG, "onError");
         setCurrentPlayState(STATE_ERROR);
+        if (mMediaPlayer != null) {
+            mMediaPlayer.reset();
+        }
         if (mCurrentCount >= LOAD_TOTAL_COUNT) {
             if (listener != null) {
                 listener.onAdVideoLoadFailed();
             }
             showPauseView(false);
         }
-        load();
+        stop();
     }
 
     /**
@@ -1111,7 +1112,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     public void onPrepared() {
         showPauseView(true);
 //        entryResumeState();
-        showDummyView(false);
+        showStopView(true);
         mCurrentCount = 0;
         if (listener != null) {
             listener.onAdVideoLoadSuccess();
@@ -1126,6 +1127,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             setCurrentPlayState(STATE_PLAYING);
             pause();
         }
+        showDummyView(false);
     }
 
     public void setId() {
@@ -1212,11 +1214,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                 @Override
                 public void onLoadingComplete(Bitmap loadedImage) {
                     if (loadedImage != null) {
-                        mFrameView.setScaleType(ImageView.ScaleType.FIT_XY);
-                        mFrameView.setImageBitmap(loadedImage);
                     } else {
-                        mFrameView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                        mFrameView.setImageResource(R.drawable.xadsdk_img_error);
                     }
                 }
             });
@@ -1240,7 +1238,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         videoPlayer.setVisibility(VISIBLE);
         frameLayout.setVisibility(VISIBLE);
         mIfCurrentIsFullscreen = true;
-        mIsTouchWiget = false;
+        mIsTouchWiget = true;
     }
 
 
