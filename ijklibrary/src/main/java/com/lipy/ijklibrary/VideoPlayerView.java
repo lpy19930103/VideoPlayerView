@@ -768,8 +768,8 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     dismissBrightnessDialog();
                     if (mChangePosition) {
                         showLoadingView();
-                        seekAndResume(mSeekTimePosition);
-//                        mMediaPlayer.seekTo(mSeekTimePosition);
+//                        seekAndResume(mSeekTimePosition);
+                        mMediaPlayer.seekTo(mSeekTimePosition);
                         int duration = getDuration();
                         int progress = mSeekTimePosition * 100 / (duration == 0 ? 1 : duration);
                         mProgressBar.setProgress(progress);
