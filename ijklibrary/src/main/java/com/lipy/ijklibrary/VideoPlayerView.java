@@ -12,7 +12,9 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
+import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
+import android.nfc.Tag;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
@@ -51,16 +53,23 @@ import java.lang.reflect.Constructor;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
+import static android.icu.lang.UCharacter.GraphemeClusterBreak.T;
+import static android.support.v7.widget.AppCompatDrawableManager.get;
+import static com.lipy.ijklibrary.R.id.mraid_content_layout;
+import static com.lipy.ijklibrary.utils.VideoUtil.hideNavKey;
+
+
 /**
  * 视频播放view
  * Created by lipy on 2017/3/12.
  */
 
-public class VideoPlayerView extends RelativeLayout implements VideoPlayerManagerListener, View.OnTouchListener, View.OnClickListener, TextureView.SurfaceTextureListener {
+public class VideoPlayerView extends RelativeLayout implements VideoPlayerManagerListener, View.OnTouchListener, View.OnClickListener, TextureView.SurfaceTextureListener, SeekBar.OnSeekBarChangeListener {
 
 
     private static final String TAG = "VideoPlayerView";
     private static final int TIME_MSG = 0x01;
+    private static final int PROGRESS_MSG = 0x02;
     private static final int TIME_INVAL = 1000;
 
     private static final int STATE_ERROR = -1;//错误
@@ -145,6 +154,29 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                         sendEmptyMessageDelayed(TIME_MSG, TIME_INVAL);//
                     }
                     break;
+                case PROGRESS_MSG:
+                    if (mPlayerManager.isPlaying()) {
+                        if (mMediaPlayer.getDuration() >= mMediaPlayer.getCurrentPosition()) {
+                            if (playerState != STATE_IDLE) {
+//                                ((Activity) getContext()).runOnUiThread(new Runnable() {
+//                                    @Override
+//                                    public void run() {
+//
+//                                    }
+//                                });
+                                setTextAndProgress();
+                                //循环清除进度
+                                if (mBuffterPoint == 0 && mProgressBar.getProgress() >= (mProgressBar.getMax() - 1)) {
+                                    loopSetProgressAndTime();
+                                }
+                                sendEmptyMessageDelayed(PROGRESS_MSG, TIME_INVAL);//
+
+                            }
+                        } else {
+                            removeCallbacksAndMessages(PROGRESS_MSG);
+                        }
+                    }
+                    break;
             }
 
 
@@ -156,7 +188,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     private SeekBar mProgressBar;
     private TextView mTotalTimeTextView;
     private TextView mCurrentTimeTextView;
-
     protected int mBuffterPoint;//缓存进度
     private ProgressBar mDialogVolumeProgressBar;
     private ImageView mBackButton;
@@ -208,7 +239,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         mBottomProgressBar = (ProgressBar) findViewById(R.id.bottom_progressbar);
         mProgressBar = (SeekBar) findViewById(R.id.progress);
         mProgressBar.setOnTouchListener(this);
-        mProgressBar.setOnClickListener(this);
+        mProgressBar.setOnSeekBarChangeListener(this);
         mTotalTimeTextView = (TextView) findViewById(R.id.total);
         mCurrentTimeTextView = (TextView) findViewById(R.id.current);
         mBackButton = (ImageView) findViewById(R.id.back);
@@ -362,40 +393,37 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     @Override
     public void onBufferingUpdate(int percent) {
-        if (playerState != STATE_IDLE) {
-            if (percent != 0) {
-                setTextAndProgress(percent);
-                mBuffterPoint = percent;
-            }
-
-            //循环清除进度
-            if (percent == 0 && mProgressBar.getProgress() >= (mProgressBar.getMax() - 1)) {
-                loopSetProgressAndTime();
-            }
+        if (percent != 0) {
+            setSecondaryProgress(percent);
+            mBuffterPoint = percent;
         }
+
     }
 
-    protected void setTextAndProgress(int secProgress) {
+    protected void setTextAndProgress() {
         int position = getCurrentPositionWhenPlaying();
         int duration = getDuration();
         int progress = position * 100 / (duration == 0 ? 1 : duration);
-        setProgressAndTime(progress, secProgress, position, duration);
+        setProgressAndTime(progress, position, duration);
     }
 
-    protected void setProgressAndTime(int progress, int secProgress, int currentTime, int totalTime) {
+    private void setSecondaryProgress(int secProgress) {
+        if (secProgress > 94) {
+            secProgress = 100;
+        }
+        if (secProgress != 0) {
+            mProgressBar.setSecondaryProgress(secProgress);
+            mBottomProgressBar.setSecondaryProgress(secProgress);
+        }
+    }
+
+    protected void setProgressAndTime(int progress, int currentTime, int totalTime) {
 //        Log.e(TAG, "progress:" + progress + "secProgress" + secProgress + "currentTime" + currentTime + "totalTime" + totalTime);
         if (!mTouchingProgressBar) {
             if (progress != 0) {
                 mProgressBar.setProgress(progress);
                 mBottomProgressBar.setProgress(progress);
             }
-        }
-//        if (secProgress > 94) {
-//            secProgress = 100;
-//        }
-        if (secProgress != 0) {
-            mProgressBar.setSecondaryProgress(secProgress);
-            mBottomProgressBar.setSecondaryProgress(secProgress);
         }
         mTotalTimeTextView.setText(VideoUtil.stringForTime(totalTime));
         if (currentTime > 0)
@@ -435,7 +463,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             mMediaPlayer.setDataSource(this.mUrl);
             mMediaPlayer.prepareAsync(); //开始异步加载
         } catch (Exception e) {
-            Log.e(TAG, e.getMessage());
+//            Log.e(TAG, e.getMessage());
             stop(); //error以后重新调用stop加载
         }
     }
@@ -455,16 +483,16 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             }
         }
         this.showPauseView(false);
-        mHandler.removeCallbacksAndMessages(null);
+        mHandler.removeCallbacksAndMessages(TIME_MSG);
     }
 
     //恢复播放
     public void resume() {
-
         if (playerState != STATE_PAUSING) {
             return;
         }
         Log.e(TAG, "do resume:" + mMediaPlayer.isPlaying());
+        mHandler.sendEmptyMessage(PROGRESS_MSG);
         if (!mMediaPlayer.isPlaying()) {
             entryResumeState();
 //            mMediaPlayer.setOnSeekCompleteListener(null);
@@ -489,7 +517,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             this.mMediaPlayer.release();
             this.mMediaPlayer = null;
         }
-        mHandler.removeCallbacksAndMessages(null);
+        mHandler.removeCallbacksAndMessages(TIME_MSG);
         setCurrentPlayState(STATE_IDLE);
         if (mCurrentCount < LOAD_TOTAL_COUNT) { //满足重新加载的条件
             mCurrentCount += 1;
@@ -502,14 +530,17 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
     //播放完成后回到初始状态
     public void playBack() {
         Log.e(TAG, " do playBack");
+//        showPauseView(true);
+        showDummyView(true);
+        showStopView(false);
         setCurrentPlayState(STATE_PAUSING);
-        mHandler.removeCallbacksAndMessages(null);
+        mHandler.removeCallbacksAndMessages(TIME_MSG);
         if (mMediaPlayer != null) {
 //            mMediaPlayer.setOnSeekCompleteListener(null);
             mMediaPlayer.seekTo(0);
             mMediaPlayer.pause();
         }
-        showPauseView(false);
+
     }
 
     //销毁播放器
@@ -521,7 +552,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             this.mMediaPlayer.release();
             this.mMediaPlayer = null;
         }
-        mHandler.removeCallbacksAndMessages(null); //release all message and runnable
+        mHandler.removeCallbacksAndMessages(TIME_MSG); //release all message and runnable
         unRegisterBroadcastReceiver();
         setCurrentPlayState(STATE_IDLE);
         mCurrentCount = 0;
@@ -561,7 +592,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                 public void onSeekComplete(IMediaPlayer iMediaPlayer) {
                     Log.e(TAG, "do seek and pause");
                     iMediaPlayer.pause();
-                    mHandler.removeCallbacksAndMessages(null);
+                    mHandler.removeCallbacksAndMessages(TIME_MSG);
                 }
 
             });
@@ -594,10 +625,10 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         }
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        return true;
-    }
+//    @Override
+//    public boolean onTouchEvent(MotionEvent event) {
+//        return true;
+//    }
 
     public boolean isTouchWiget() {
         return mIsTouchWiget;
@@ -717,6 +748,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                 case MotionEvent.ACTION_MOVE:
+                    mHandler.removeCallbacksAndMessages(PROGRESS_MSG);
                     ViewParent vpdown = getParent();
                     while (vpdown != null) {
                         vpdown.requestDisallowInterceptTouchEvent(true);
@@ -724,6 +756,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     }
                     break;
                 case MotionEvent.ACTION_UP:
+                    mHandler.sendEmptyMessage(PROGRESS_MSG);
                     ViewParent vpup = getParent();
                     while (vpup != null) {
                         vpup.requestDisallowInterceptTouchEvent(false);
@@ -733,7 +766,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                     break;
             }
         }
-        return true;
+        return false;
     }
 
     private Dialog mVolumeDialog;
@@ -1049,6 +1082,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             showPlayView();
             showDummyView(false);
             showStopView(true);
+            mHandler.sendEmptyMessage(PROGRESS_MSG);
         }
         Log.e(TAG, "onSurfaceTextureAvailable");
         videoSurface = new Surface(surface);
@@ -1083,6 +1117,7 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
         playerOver();
         setIsComplete(true);
         setIsRealPause(true);
+        mHandler.removeCallbacksAndMessages(PROGRESS_MSG);
         playBack();
     }
 
@@ -1132,6 +1167,24 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
 
     public void setId() {
         setId(FULLSCREEN_ID);
+    }
+
+    @Override
+    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+
+    }
+
+    @Override
+    public void onStartTrackingTouch(SeekBar seekBar) {
+
+    }
+
+    @Override
+    public void onStopTrackingTouch(SeekBar seekBar) {
+//        if (GSYVideoManager.instance().getMediaPlayer() != null && mHadPlay) {
+        int time = seekBar.getProgress() * getDuration() / 100;
+        mMediaPlayer.seekTo(time);
+//        }
     }
 
 
@@ -1398,7 +1451,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
             videoPlayerView.setVisibility(INVISIBLE);
             relativeLayout.setVisibility(INVISIBLE);
             resolveFullVideoShow(context, videoPlayerView, relativeLayout);
-
             videoPlayerView.setDataUrl(mUrl);
             videoPlayerView.addTextureView();
             setCurrentPlayState(STATE_PLAYING);
@@ -1450,23 +1502,6 @@ public class VideoPlayerView extends RelativeLayout implements VideoPlayerManage
                 VideoUtil.getAppCompActivity(context).getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                         WindowManager.LayoutParams.FLAG_FULLSCREEN);
             }
-        }
-    }
-
-
-    public static void hideNavKey(Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            //       设置屏幕始终在前面，不然点击鼠标，重新出现虚拟按键
-            ((Activity) context).getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION // hide nav
-                            // bar
-                            | View.SYSTEM_UI_FLAG_IMMERSIVE);
-        } else {
-            ((Activity) context).getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION // hide nav
-            );
         }
     }
 
