@@ -105,6 +105,7 @@
                 android:layout_height="fill_parent"
                 android:paddingRight="16dp"
                 android:scaleType="center"
+                android:visibility="gone"
                 android:src="@drawable/video_enlarge" />
         </LinearLayout>
 
@@ -132,6 +133,7 @@
                 android:layout_width="30dp"
                 android:layout_height="30dp"
                 android:paddingLeft="10dp"
+                android:visibility="gone"
                 android:scaleType="centerInside"
                 android:src="@drawable/video_back" />
 
