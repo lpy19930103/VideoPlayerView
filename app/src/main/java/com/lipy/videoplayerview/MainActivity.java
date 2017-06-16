@@ -21,9 +21,9 @@ public class MainActivity extends AppCompatActivity {
         mVideoPlayerView.setId();
         mVideoPlayerView.setViewGroup(layout);
 //        mVideoPlayerView.setDataUrl("http://192.168.43.234:8080/miniapps/test.mp4");
-        mVideoPlayerView.setDataUrl("http://192.168.1.125:8080/miniapps/test2.mp4");
+//        mVideoPlayerView.setDataUrl("http://192.168.1.125:8080/miniapps/test2.mp4");
 //        mVideoPlayerView.setDataUrl("http://baobab.wdjcdn.com/14564977406580.mp4");
-//        mVideoPlayerView.setDataUrl("http://ongeesmn7.bkt.clouddn.com/miniapps/test.mp4");
+        mVideoPlayerView.setDataUrl("http://ongeesmn7.bkt.clouddn.com/miniapps/test.mp4");
         layout.addView(mVideoPlayerView);
     }
 
